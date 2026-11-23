@@ -1,0 +1,10 @@
+{
+  "description": "Enables residents to report local hazards and track updates while barangay teams verify incidents, coordinate responders, and monitor community safety.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
