@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+cd "$(dirname "$0")"
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+  echo "Install Node.js 22 with npm, then run setup again." >&2
+  exit 1
+fi
+
+install_dependencies() {
+  echo "Installing dependencies for $1..."
+  (cd "$2" && npm install --include=dev)
+}
+
+install_dependencies "the web app" .
+install_dependencies "the Expo resident app" apps/resident-mobile
+echo "Setup complete. Run npm run dev for the web app, or cd apps/resident-mobile && npm start for Expo."

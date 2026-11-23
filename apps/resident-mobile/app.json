@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "A.L.I.S.T.O. Resident",
+    "slug": "alisto-resident",
+    "version": "1.0.0",
+    "platforms": ["android"],
+    "android": { "package": "com.alisto.resident" },
+    "plugins": [
+      ["expo-image-picker", { "microphonePermission": false, "cameraPermission": false }],
+      "expo-location",
+      "expo-sqlite"
+    ]
+  }
+}
