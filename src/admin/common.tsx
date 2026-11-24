@@ -17,7 +17,6 @@ export interface AdminSettings {
 
 export interface AdminCtxValue {
   role: Exclude<Role, 'resident'>
-  setRole: (r: Exclude<Role, 'resident'>) => void
   page: Page
   param?: string
   go: (p: Page, param?: string) => void

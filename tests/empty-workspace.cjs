@@ -54,8 +54,16 @@ for (const [file, names] of Object.entries(residentScreens)) {
   for (const name of names) render(require(`../src/resident/${file}.tsx`)[name])
 }
 render(require('../src/resident/Onboarding.tsx').Onboarding, 'official', { onLightStatus: noop })
-render(require('../src/admin/Login.tsx').StaffLogin, 'official', { onDone: noop, onExit: noop })
+render(require('../src/admin/StaffLogin.tsx').StaffLogin, 'official', { onAuthenticated: noop, onExit: noop })
 render(require('../src/App.tsx').default)
+for (const hash of ['#admin', '#responder']) {
+  global.location.hash = hash
+  const html = render(require('../src/App.tsx').default)
+  assert.match(html, /Staff sign in/)
+  assert.doesNotMatch(html, /Open local workspace|Switch workspace view|id="admin-main"/)
+}
+global.location.hash = ''
+
 
 // User-entered data must not gain fabricated photos, AI results, or verified identity.
 const report = currentStore.submitReport({ category: 'road', title: 'User-entered report', description: 'Description supplied by the user', photos: [], x: 50, y: 50, address: 'Selected coordinates', purok: 'Area not verified', danger: false, affected: 0, anonymous: true })

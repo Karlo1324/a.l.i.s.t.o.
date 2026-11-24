@@ -132,7 +132,7 @@ export function MapView({ markers = [], selectedId, onSelect, heatmap, clusters,
         dragging={interactive} scrollWheelZoom={interactive} doubleClickZoom={interactive}
         touchZoom={interactive} boxZoom={interactive} keyboard={interactive}
         className="absolute inset-0 h-full w-full" style={{ zIndex: 0 }}>
-        <TileLayer key={retry} url={TILE_URL} attribution={ATTRIBUTION} maxZoom={19}
+        <TileLayer key={retry} url={TILE_URL} crossOrigin={TILE_URL.startsWith('https://tile.openstreetmap.org/')} attribution={ATTRIBUTION} maxZoom={19}
           eventHandlers={{ tileerror: () => setTileError(true) }} />
         <MapController focus={focus} onPick={interactive ? onPick : undefined} onReady={setMap} onZoom={setZoom} />
         {heatmap && markers.map((marker) => <Circle key={marker.id} center={toLatLng(marker)} radius={marker.status === 'resolved' ? 45 : 90}

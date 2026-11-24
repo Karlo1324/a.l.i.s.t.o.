@@ -27,7 +27,8 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
   const [title, setTitle] = useState('')
   const [desc, setDesc] = useState('')
   const [danger, setDanger] = useState(false)
-  const [affected, setAffected] = useState(0)
+  const [affectedText, setAffectedText] = useState('0')
+  const affected = Number(affectedText)
   const [photos, setPhotos] = useState<string[]>([])
   const [loc, setLoc] = useState<{ x: number; y: number } | null>(null)
   const { location, locating, error: locationError, locate, cancel: cancelLocate } = useDeviceLocation()
@@ -110,6 +111,15 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
             Cancel
           </button>
         </div>
+        <div className="mt-2 flex items-center gap-3 rounded-[18px] bg-danger-soft p-3.5">
+          <Phone size={18} className="shrink-0 text-danger" />
+          <span className="flex-1 text-[13px] leading-snug text-ink">
+            <b>Life-threatening emergency?</b> Contact your local emergency service first.
+          </span>
+          <button onClick={() => nav.openSheet('hotlines')} className="text-[13px] font-semibold text-danger">
+            Call
+          </button>
+        </div>
         <div className="mt-2 flex gap-1.5">
           {STEPS.map((s, i) => (
             <span key={s} className="h-1 flex-1 overflow-hidden rounded-full bg-surface-3">
@@ -151,15 +161,6 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
                   </button>
                 )
               })}
-            </div>
-            <div className="mt-5 flex items-center gap-3 rounded-[18px] bg-danger-soft p-3.5">
-              <Phone size={18} className="shrink-0 text-danger" />
-              <span className="flex-1 text-[13px] leading-snug text-ink">
-                <b>Life-threatening emergency?</b> Contact your local emergency service first.
-              </span>
-              <button onClick={() => nav.openSheet('hotlines')} className="text-[13px] font-semibold text-danger">
-                Call
-              </button>
             </div>
           </>
         )}
@@ -205,11 +206,19 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
                     <div className="text-[13px] text-ink-3">Your best estimate</div>
                   </div>
                   <div className="flex items-center gap-1 rounded-full bg-surface-2 p-1">
-                    <button aria-label="Decrease" onClick={() => setAffected(Math.max(0, affected - 5))} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface shadow-card">
+                    <button aria-label="Decrease" onClick={() => setAffectedText(String(Math.max(0, affected - 5)))} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface shadow-card">
                       <Minus size={16} />
                     </button>
-                    <span className="w-10 text-center text-[16px] font-semibold tabular">{affected}</span>
-                    <button aria-label="Increase" onClick={() => setAffected(affected + 5)} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface shadow-card">
+                    <input aria-label="People affected" type="text" inputMode="numeric" pattern="[0-9]*"
+                      value={affectedText} placeholder="0"
+                      onChange={event => {
+                        const digits = event.target.value.replace(/[^0-9]/g, '')
+                        if (Number.isSafeInteger(Number(digits))) setAffectedText(digits)
+                      }}
+                      onFocus={event => event.target.select()}
+                      onBlur={() => setAffectedText(String(affected))}
+                      className="h-8 w-16 rounded-lg bg-surface text-center text-[16px] font-semibold tabular ring-1 ring-line" />
+                    <button aria-label="Increase" onClick={() => setAffectedText(String(Math.min(Number.MAX_SAFE_INTEGER, affected + 5)))} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface shadow-card">
                       <Plus size={16} />
                     </button>
                   </div>

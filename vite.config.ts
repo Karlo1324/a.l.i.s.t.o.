@@ -1,4 +1,4 @@
-import { defineConfig, type HtmlTagDescriptor, type Plugin } from 'vite'
+import { defineConfig, loadEnv, type HtmlTagDescriptor, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import fs from 'node:fs'
@@ -12,7 +12,24 @@ export default defineConfig(({ mode }) => {
   // .figma/make/deploy-preview passes `--mode development` for cached-preview builds.
   const emitSourcemaps = mode === 'development'
 
+  const env = loadEnv(mode, process.cwd(), 'VITE_')
+  const publicNames = ['VITE_MAP_TILE_URL', 'VITE_MAP_ATTRIBUTION', 'VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY']
+  const key = env.VITE_SUPABASE_ANON_KEY
+  if (key && !key.startsWith('sb_publishable_')) {
+    let role: unknown
+    try {
+      role = JSON.parse(Buffer.from(key.split('.')[1], 'base64url').toString()).role
+    } catch {
+      // Unrecognized keys must stay out of the browser build.
+    }
+    if (role !== 'anon') throw new Error('Use a Supabase publishable or legacy anon key for the web client.')
+  }
+
   return {
+    envPrefix: [],
+    define: Object.fromEntries(publicNames.map(name => [
+      `import.meta.env.${name}`, JSON.stringify(env[name]) ?? 'undefined',
+    ])),
     base: process.env.FIGMA_PUBLIC_URL ? `${process.env.FIGMA_PUBLIC_URL}/` : '/',
     build: {
       sourcemap: emitSourcemaps ? 'inline' : false,

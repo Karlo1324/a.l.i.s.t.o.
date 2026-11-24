@@ -98,7 +98,7 @@ export function Verification() {
       <PageHeader title="Verification" subtitle="Review resident reports before they enter dispatch. No automatic classifications are generated." actions={<span className="rounded-full bg-surface px-3 py-1.5 text-[13px] font-semibold shadow-card ring-1 ring-line">{queue.length} in queue</span>} />
       <div className="grid gap-4 xl:grid-cols-[300px_1fr]">
         {/* Queue */}
-        <Panel bodyClass="p-2" className="xl:sticky xl:top-0 xl:max-h-[calc(100vh-140px)] xl:self-start">
+        <Panel bodyClass="p-2" className={inc ? 'xl:sticky xl:top-0 xl:max-h-[calc(100vh-140px)] xl:self-start' : 'xl:self-stretch'}>
           <div className="p-1 pb-2">
             <SearchField value={q} onChange={setQ} placeholder="Filter queue" />
           </div>

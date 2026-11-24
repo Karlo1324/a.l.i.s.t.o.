@@ -24,12 +24,13 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Avatar, CategoryIcon, IconButton, LogoMark, RolePill, StatusPill, Toaster } from '../components/ui'
-import { ROLES, type Role } from '../data/meta'
+import { ROLES } from '../data/meta'
 import { cx, timeAgo } from '../lib/format'
 import { useStore } from '../store'
 import { ThemeToggle } from '../App'
-import { ACCESS, AdminCtx, Menu, Restricted, WORKSPACE_USERS, useAdmin, type AdminCtxValue, type AdminSettings, type Page } from './common'
-import { StaffLogin } from './Login'
+import { ACCESS, AdminCtx, Menu, Restricted, useAdmin, type AdminCtxValue, type AdminSettings, type Page } from './common'
+import type { StaffSession } from '../lib/staffAuth'
+import { StaffLogin } from './StaffLogin'
 import { Overview } from './Overview'
 import { Incidents } from './Incidents'
 import { Verification } from './Verification'
@@ -41,7 +42,6 @@ import { ActivityPage } from './Activity'
 import { UsersPage } from './Users'
 import { SettingsPage } from './Settings'
 
-type StaffRole = Exclude<Role, 'resident'>
 
 const NAV: { page: Page; label: string; icon: LucideIcon; group: string; responderLabel?: string }[] = [
   { page: 'overview', label: 'Overview', icon: LayoutGrid, group: 'Operations', responderLabel: 'Today' },
@@ -57,22 +57,37 @@ const NAV: { page: Page; label: string; icon: LucideIcon; group: string; respond
 ]
 
 export function AdminApp({ onExit, onResident }: { onExit: () => void; onResident: () => void }) {
-  const [role, setRoleState] = useState<StaffRole | null>(null)
+  const [session, setSession] = useState<StaffSession | null>(null)
+  const role = session?.role
   const [page, setPage] = useState<Page>('overview')
   const [param, setParam] = useState<string | undefined>()
   const [settings, setSettingsState] = useState<AdminSettings>({ aiEnabled: false, aiThreshold: 70, dupRadius: 150, autoEscalate: false })
-  const { toast, addAudit } = useStore()
+  useEffect(() => {
+    if (!session) return
+    let active = true
+    const lock = () => { if (active) setSession(null) }
+    const verify = async () => {
+      try {
+        const { staffProfile } = await import('../lib/staffAuth')
+        const profile = await staffProfile(session.token)
+        if (profile.id !== session.id || profile.role !== session.role) lock()
+      } catch { lock() }
+    }
+    const expiry = window.setTimeout(lock, Math.max(0, session.expiresAt - Date.now()))
+    const interval = window.setInterval(verify, 60_000)
+    window.addEventListener('focus', verify)
+    return () => {
+      active = false
+      clearTimeout(expiry)
+      clearInterval(interval)
+      window.removeEventListener('focus', verify)
+    }
+  }, [session])
 
   const ctx = useMemo<AdminCtxValue | null>(
     () =>
-      role && {
+      session && role ? {
         role,
-        setRole: (r) => {
-          setRoleState(r)
-          setPage('overview')
-          setParam(undefined)
-          toast(`Workspace view: ${ROLES[r].label}`)
-        },
         page,
         param,
         go: (p, prm) => {
@@ -80,26 +95,29 @@ export function AdminApp({ onExit, onResident }: { onExit: () => void; onResiden
           setParam(prm)
           document.getElementById('admin-main')?.scrollTo({ top: 0 })
         },
-        user: WORKSPACE_USERS[role],
+        user: { name: session.name, first: session.name.split(' ')[0], title: ROLES[role].label, email: session.email, responderId: role === 'responder' ? session.id : undefined },
         settings,
         setSettings: (s) => setSettingsState((x) => ({ ...x, ...s })),
-      },
-    [role, page, param, settings, toast],
+      } : null,
+    [session, role, page, param, settings],
   )
 
-  if (!role || !ctx)
-    return (
-      <StaffLogin
-        onExit={onExit}
-        onDone={(r) => {
-          setRoleState(r)
-        }}
-      />
-    )
+  if (!ctx || !session) {
+    function handleStaffSignIn(verifiedSession: StaffSession) {
+      setParam(undefined)
+      setPage(verifiedSession.role === 'responder' ? 'tasks' : 'overview')
+      setSession(verifiedSession)
+    }
+
+    return <StaffLogin onExit={onExit} onAuthenticated={handleStaffSignIn} />
+  }
 
   return (
     <AdminCtx.Provider value={ctx}>
-      <Shell onExit={onExit} onResident={onResident} onSignOut={() => setRoleState(null)} />
+      <Shell onExit={onExit} onResident={onResident} onSignOut={() => {
+        setSession(null)
+        void import('../lib/staffAuth').then(auth => auth.signOutStaff(session.token)).catch(() => {})
+      }} />
     </AdminCtx.Provider>
   )
 }
@@ -172,7 +190,7 @@ function Shell({ onExit, onResident, onSignOut }: { onExit: () => void; onReside
           </div>
         ))}
       </nav>
-      <div className="px-4 pb-3 text-xs text-ink-3">Local workspace · not signed in</div>
+      <div className="px-4 pb-3 text-xs text-ink-3">Local report workspace</div>
       <div className={cx('border-t border-line p-3', collapsedCapable && 'max-xl:px-2')}>
         <Menu
           align="left"
@@ -225,16 +243,7 @@ function Shell({ onExit, onResident, onSignOut }: { onExit: () => void; onReside
             </kbd>
           </button>
           <IconButton icon={Search} label="Search" className="lg:hidden" onClick={() => setPalette(true)} />
-          <Menu
-            trigger={(open) => (
-              <button onClick={open} className="hidden h-9 items-center gap-2 rounded-[11px] px-2.5 text-[13px] font-semibold ring-1 ring-line-2 transition hover:bg-surface-2 sm:flex" title="Switch workspace view">
-                <span className="h-2 w-2 rounded-full" style={{ background: ROLES[ctx.role].color }} />
-                {ROLES[ctx.role].label.split(' /')[0]}
-                <ChevronsUpDown size={14} className="text-ink-3" />
-              </button>
-            )}
-            items={(['official', 'responder', 'admin'] as StaffRole[]).map((r) => ({ label: `View as ${ROLES[r].label}`, onClick: () => ctx.setRole(r) }))}
-          />
+          <RolePill role={ctx.role} />
           <ThemeToggle className="h-9 w-9 shadow-none" />
           <NotificationsPopover unread={unread} />
         </header>

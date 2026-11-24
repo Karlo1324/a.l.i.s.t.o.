@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { ArrowLeft, Lock, Mail } from 'lucide-react'
+import { ArrowLeft, Mail } from 'lucide-react'
 import { Button, Field, LogoMark, Segmented, TextInput } from '../components/ui'
+import { PasswordField } from '../components/PasswordField'
 import { ROLES, type Role } from '../data/meta'
 import { ThemeToggle } from '../App'
 
@@ -19,7 +20,7 @@ export function StaffLogin({ onDone, onExit }: { onDone: (r: StaffRole) => void;
       <p className="mt-3 text-ink-2">Account sign-in and two-factor authentication are not connected yet.</p>
       <div className="mt-6 space-y-4">
         <Field label="Work email"><TextInput icon={Mail} placeholder="Email" type="email" autoComplete="username" /></Field>
-        <Field label="Password"><TextInput icon={Lock} placeholder="Password" type="password" autoComplete="current-password" /></Field>
+        <PasswordField />
         <Button disabled className="w-full">Sign in unavailable</Button>
       </div>
       <div className="mt-8 border-t border-line pt-6">

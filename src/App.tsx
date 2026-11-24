@@ -7,7 +7,7 @@ import { StoreProvider, useStore } from './store'
 import { ROLES, type Role } from './data/meta'
 import { cx } from './lib/format'
 
-type View = 'home' | 'resident' | 'admin'
+type View = 'home' | 'resident' | 'admin' | 'responder'
 
 export default function App() {
   return (
@@ -18,7 +18,7 @@ export default function App() {
 }
 
 function useHashView(): [View, (v: View) => void] {
-  const read = (): View => (location.hash === '#resident' ? 'resident' : location.hash === '#admin' ? 'admin' : 'home')
+  const read = (): View => (location.hash === '#resident' ? 'resident' : location.hash === '#admin' ? 'admin' : location.hash === '#responder' ? 'responder' : 'home')
   const [v, setV] = useState<View>(read)
   useEffect(() => {
     const fn = () => setV(read())
@@ -31,7 +31,7 @@ function useHashView(): [View, (v: View) => void] {
 function Shell() {
   const [view, setView] = useHashView()
   if (view === 'resident') return <ResidentShowcase onHome={() => setView('home')} onAdmin={() => setView('admin')} />
-  if (view === 'admin') return <AdminApp onExit={() => setView('home')} onResident={() => setView('resident')} />
+  if (view === 'admin' || view === 'responder') return <AdminApp key={view} onExit={() => setView('home')} onResident={() => setView('resident')} />
   return <Launcher onPick={setView} />
 }
 
@@ -67,9 +67,10 @@ function Launcher({ onPick }: { onPick: (v: View) => void }) {
           <p className="mt-5 max-w-xl text-[18px] leading-relaxed text-ink-2">A community safety platform connecting residents, barangay officials, and responders — from the first report to resolution.</p>
         </div>
 
-        <div className="mx-auto mt-14 grid max-w-4xl gap-5 md:grid-cols-2">
+        <div className="mx-auto mt-14 grid max-w-4xl gap-5 md:grid-cols-3">
           {[
             { v: 'resident' as const, icon: Smartphone, t: 'Resident App', s: 'Mobile PWA · 390 × 844', d: 'Add incidents with your photos and device location, then track their status in this workspace.', c: '#e5372a' },
+            { v: 'responder' as const, icon: Smartphone, t: 'Responder App', s: 'Field workspace', d: 'View assigned incidents and record progress from the field.', c: '#14745c' },
             { v: 'admin' as const, icon: LayoutDashboard, t: 'Official Dashboard', s: 'Desktop · 1440 × 900', d: 'Review reports, manage incident status, and inspect locations on the map.', c: '#1f4fd1' },
           ].map((c) => (
             <button key={c.v} onClick={() => onPick(c.v)} className="group relative overflow-hidden rounded-[30px] bg-surface p-7 text-left shadow-card ring-1 ring-line transition duration-300 hover:-translate-y-1 hover:shadow-float">
