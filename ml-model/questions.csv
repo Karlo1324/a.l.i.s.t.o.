@@ -1,0 +1,13 @@
+text,intent,phrase_family
+"What issue was reported most?",top_category,category_1
+"Which incident is most common?",top_category,category_2
+"What is the highest reported issue?",top_category,category_3
+"Did reports increase this week?",period_change,change_1
+"Are there more incidents than last week?",period_change,change_2
+"Did the number of reports go down?",period_change,change_3
+"How many incidents were reported?",period_total,total_1
+"What is the total number of reports?",period_total,total_2
+"How many reports were submitted this week?",period_total,total_3
+"Will it rain tomorrow?",unsupported,unsupported_1
+"Will my street flood tomorrow?",unsupported,unsupported_2
+"Who will win the election?",unsupported,unsupported_3
