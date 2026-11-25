@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ClipboardList, House, Map as MapIcon, Plus, UserRound } from 'lucide-react'
 import { Toaster } from '../components/ui'
-import { LOCAL_RESIDENT } from '../data/records'
 import { cx } from '../lib/format'
 import { useStore } from '../store'
 import { Forgot, Login, Register } from './Auth'
@@ -19,12 +18,16 @@ import type { Category } from '../data/meta'
 export type ResidentJump = 'onboarding' | 'login' | 'register' | 'forgot' | 'home' | 'report' | 'map' | 'reports' | 'reportDetail' | 'notifications' | 'profile'
 
 export function ResidentApp({ framed, jump }: { framed: boolean; jump?: { to: ResidentJump; n: number } }) {
-  const { incidents } = useStore()
+  const { resident, signedIn, incidents } = useStore()
   const [stage, setStage] = useState<Stage>('onboarding')
   const [tab, setTabState] = useState<Tab>('home')
   const [stack, setStack] = useState<Route[]>([])
   const [sheet, setSheet] = useState<'hotlines' | 'gobag' | null>(null)
   const [onbLight, setOnbLight] = useState(true)
+
+  useEffect(() => {
+    if (signedIn) setStage(current => current === 'onboarding' ? 'app' : current)
+  }, [signedIn])
 
   const nav: Nav = useMemo(
     () => ({
@@ -61,7 +64,7 @@ export function ResidentApp({ framed, jump }: { framed: boolean; jump?: { to: Re
     else if (t === 'notifications') setStack([{ name: 'notifications' }])
     else if (t === 'reportDetail') {
       setTabState('reports')
-      const id = incidents.find((i) => i.reporter.id === LOCAL_RESIDENT.id && i.status === 'progress')?.id
+      const id = incidents.find((i) => i.reporter.id === resident.id && i.status === 'progress')?.id
       setStack(id ? [{ name: 'reportDetail', id }] : [])
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

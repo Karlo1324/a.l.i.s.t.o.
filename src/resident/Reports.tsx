@@ -3,16 +3,16 @@ import { ChevronLeft, CircleCheck, ClipboardList, MapPin, MessageCircle, Message
 import { Avatar, Button, CategoryIcon, CategoryTag, EmptyState, Segmented, Sheet, StatusPill, TextArea } from '../components/ui'
 import { MapView } from '../components/Map'
 import { CATEGORIES, STATUS_FLOW, STATUSES } from '../data/meta'
-import { LOCAL_RESIDENT, RESPONDERS } from '../data/records'
+import { RESPONDERS } from '../data/records'
 import { cx, fmtDateTime, fmtTime, timeAgo } from '../lib/format'
 import { useStore } from '../store'
 import { Screen, StatusTrack, useNav } from './common'
 
 export function MyReports() {
   const nav = useNav()
-  const { incidents } = useStore()
+  const { resident, incidents } = useStore()
   const [seg, setSeg] = useState<'active' | 'closed' | 'all'>('active')
-  const mine = incidents.filter((i) => i.reporter.id === LOCAL_RESIDENT.id)
+  const mine = incidents.filter((i) => i.reporter.id === resident.id)
   const shown = mine.filter((i) => (seg === 'all' ? true : seg === 'active' ? !['resolved', 'rejected'].includes(i.status) : ['resolved', 'rejected'].includes(i.status)))
   const resolved = mine.filter((i) => i.status === 'resolved').length
 
@@ -70,7 +70,7 @@ export function MyReports() {
 
 export function ReportDetail({ id }: { id: string }) {
   const nav = useNav()
-  const { getIncident, toast, updateIncident } = useStore()
+  const { resident, getIncident, toast, updateIncident } = useStore()
   const inc = getIncident(id)
   const [photoIdx, setPhotoIdx] = useState(0)
   const [addInfo, setAddInfo] = useState(false)
@@ -78,7 +78,7 @@ export function ReportDetail({ id }: { id: string }) {
   const [withdraw, setWithdraw] = useState(false)
   const [rating, setRating] = useState(0)
   if (!inc) return null
-  const mine = inc.reporter.id === LOCAL_RESIDENT.id
+  const mine = inc.reporter.id === resident.id
   const responder = RESPONDERS.find((r) => r.id === inc.assignee)
   const idx = STATUS_FLOW.indexOf(inc.status)
 
@@ -265,7 +265,7 @@ export function ReportDetail({ id }: { id: string }) {
           onClick={() => {
             setAddInfo(false)
             setInfo('')
-            updateIncident(inc.id, { timeline: [...inc.timeline, { status: inc.status, at: new Date(), by: inc.anonymous ? 'Anonymous reporter' : LOCAL_RESIDENT.name, note: info.trim() }] })
+            updateIncident(inc.id, { timeline: [...inc.timeline, { status: inc.status, at: new Date(), by: inc.anonymous ? 'Anonymous reporter' : resident.name, note: info.trim() }] })
             toast('Information added to the local report', 'success')
           }}
         >
@@ -281,7 +281,7 @@ export function ReportDetail({ id }: { id: string }) {
             variant="danger"
             className="mt-5 w-full"
             onClick={() => {
-              updateIncident(inc.id, { status: 'rejected', rejectReason: 'Withdrawn by the resident.' }, { note: 'Withdrawn by resident', by: LOCAL_RESIDENT.name, role: 'resident' })
+              updateIncident(inc.id, { status: 'rejected', rejectReason: 'Withdrawn by the resident.' }, { note: 'Withdrawn by resident', by: resident.name, role: 'resident' })
               setWithdraw(false)
               toast('Report withdrawn')
             }}

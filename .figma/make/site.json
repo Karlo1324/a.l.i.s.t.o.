@@ -1,4 +1,5 @@
 {
+  "icons": { "icon": "/favicon.png?v=alisto" },
   "description": "Enables residents to report local hazards and track updates while barangay teams verify incidents, coordinate responders, and monitor community safety.",
   "robots": {
     "index": false

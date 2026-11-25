@@ -21,7 +21,7 @@ const SUGGEST: Record<Category, string[]> = {
 }
 export function ReportFlow({ initialCategory }: { initialCategory?: Category }) {
   const nav = useNav()
-  const { submitReport } = useStore()
+  const { submitReport, signedIn, resident } = useStore()
   const [step, setStep] = useState(initialCategory ? 1 : 0)
   const [category, setCategory] = useState<Category | null>(initialCategory ?? null)
   const [title, setTitle] = useState('')
@@ -35,6 +35,9 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
   const [landmark, setLandmark] = useState('')
   const [anonymous, setAnonymous] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [reportId] = useState(() => crypto.randomUUID())
+  const uploads = useRef(new Map<string, string>())
+  const [error, setError] = useState('')
   const [done, setDone] = useState<Incident | null>(null)
   const [confirmClose, setConfirmClose] = useState(false)
   const [flash, setFlash] = useState(false)
@@ -47,19 +50,35 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
   }, [step])
 
   const addr = loc ? addressFor(loc.x, loc.y) : null
-  const canNext = [!!category, title.trim().length >= 4 && desc.trim().length >= 10, true, !!loc && !locating, true][step]
+  const canNext = [!!category, title.trim().length >= 5 && desc.trim().length >= 10, true, !!loc && !locating, true][step]
 
   const cameraRef = useRef<HTMLInputElement>(null)
   const takePhoto = () => cameraRef.current?.click()
   const uploadPhotos = (files: FileList | null) => {
+    if (Array.from(files ?? []).some(f => !['image/jpeg', 'image/png', 'image/webp'].includes(f.type) || f.size > 5242880)) {
+      setError('Choose JPEG, PNG, or WebP photos up to 5 MB each.')
+      return
+    }
+    setError('')
     const selected = Array.from(files ?? []).filter((f) => f.type.startsWith('image/')).slice(0, 6 - photos.length)
     setPhotos((list) => [...list, ...selected.map((f) => URL.createObjectURL(f))].slice(0, 6))
   }
 
-  const submit = () => {
-    if (!category || !loc || !addr) return
-    const inc = submitReport({ category, title: title.trim(), description: desc.trim(), photos, x: loc.x, y: loc.y, address: addr.address, purok: addr.purok, landmark: landmark || undefined, danger, affected, anonymous })
-    setDone(inc)
+  const submit = async () => {
+    if (!category || !loc || !addr || submitting) return
+    const report = { category, title: title.trim(), description: desc.trim(), photos, x: loc.x, y: loc.y, address: addr.address, purok: addr.purok, landmark: landmark || undefined, danger, affected, anonymous }
+    setSubmitting(true)
+    setError('')
+    try {
+      const saved = signedIn ? await (await import('../lib/submitResidentReport')).submitResidentReport(
+        reportId, resident.id, report, location?.x === loc.x && location?.y === loc.y ? 'GPS' : 'MANUAL', uploads.current
+      ) : undefined
+      setDone(submitReport(report, saved))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Submission failed. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (done)
@@ -72,8 +91,8 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
               <Check size={48} strokeWidth={2.6} />
             </span>
           </div>
-          <h1 className="mt-8 text-[30px] font-bold tracking-tight">Report added locally</h1>
-          <p className="mt-2 max-w-[300px] text-[16px] leading-relaxed text-ink-2">Your report is available in this local workspace. It has not been sent to officials and will clear on refresh.</p>
+          <h1 className="mt-8 text-[30px] font-bold tracking-tight">{signedIn ? 'Report submitted' : 'Report added locally'}</h1>
+          <p className="mt-2 max-w-[300px] text-[16px] leading-relaxed text-ink-2">{signedIn ? 'Your report is pending barangay verification.' : 'Your guest report is stored locally until you refresh.'}</p>
           <div className="mt-8 w-full rounded-[22px] bg-surface p-4 text-left shadow-card ring-1 ring-line">
             <div className="flex items-center gap-3">
               <CategoryIcon category={done.category} size={44} />
@@ -102,12 +121,12 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
       {/* header */}
       <div className="relative z-10 px-4 pt-[54px]">
         <div className="flex h-11 items-center justify-between">
-          <button onClick={() => (step === 0 || (initialCategory && step === 1) ? (category || title ? setConfirmClose(true) : nav.pop()) : setStep(step - 1))} className="flex items-center text-[17px] text-accent">
+          <button disabled={submitting} onClick={() => (step === 0 || (initialCategory && step === 1) ? (category || title ? setConfirmClose(true) : nav.pop()) : setStep(step - 1))} className="flex items-center text-[17px] text-accent">
             {step === 0 ? <X size={24} /> : <ChevronLeft size={28} strokeWidth={2.2} />}
             {step === 0 ? '' : 'Back'}
           </button>
           <span className="text-[17px] font-semibold">New report</span>
-          <button onClick={() => setConfirmClose(true)} className="text-[17px] text-ink-3">
+          <button disabled={submitting} onClick={() => setConfirmClose(true)} className="text-[17px] text-ink-3">
             Cancel
           </button>
         </div>
@@ -257,11 +276,11 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
               <Button variant="secondary" size="lg" icon={ImagePlus} onClick={() => fileRef.current?.click()} disabled={photos.length >= 6}>
                 Library
               </Button>
-              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { uploadPhotos(e.target.files); e.target.value = '' }} />
+              <input ref={cameraRef} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden" onChange={(e) => { uploadPhotos(e.target.files); e.target.value = '' }} />
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 multiple
                 className="hidden"
                 onChange={(e) => {
@@ -382,7 +401,7 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
             </div>
             <div className="mt-4 flex gap-2.5 px-1 text-[12px] leading-relaxed text-ink-3">
               <ShieldCheck size={16} className="mt-0.5 shrink-0" />
-              By submitting, you confirm this report is accurate. This report is stored only in the current workspace.
+              By submitting, you confirm this report is accurate. {signedIn ? 'Your report will be sent for verification.' : 'Guest reports are stored only in this workspace.'}
             </div>
           </>
         )}
@@ -390,13 +409,14 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
 
       {step !== 3 || !locating ? (
         <div className={cx('relative z-10 px-5 pt-3 pb-9', step === 3 ? 'bg-surface' : 'glass-strong border-t border-line')}>
+          {error && <p role="alert" className="mb-2 text-sm text-danger">{error}</p>}
           {step < 4 ? (
             <Button size="lg" className="w-full" disabled={!canNext} onClick={() => setStep(step + 1)}>
               {step === 2 && photos.length === 0 ? 'Skip for now' : step === 3 ? 'Confirm location' : 'Continue'}
             </Button>
           ) : (
             <Button size="lg" className="w-full bg-alert text-white" loading={submitting} onClick={submit}>
-              Add report locally
+              {signedIn ? 'Submit report' : 'Add report locally'}
             </Button>
           )}
         </div>
