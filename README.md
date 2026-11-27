@@ -21,7 +21,7 @@ npm run dev
 
 Open [localhost on port 8443](http://localhost:8443/). Without Supabase configuration, the resident guest flow and staff dashboard use a local demo workspace. With Supabase configured, sign in as a resident to submit reports and use the staff dashboard to review and dispatch them.
 
-## Run the Android app
+## Run the Android app (Note: This is still a beta test po :( )
 
 For a local Android build, configure the Android SDK and Java development kit, then start an emulator or connect an Android phone with USB debugging enabled. After running the root setup script, run these commands from the repository root.
 
