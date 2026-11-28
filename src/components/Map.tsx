@@ -41,6 +41,7 @@ interface Props {
   initialZoom?: number
   className?: string
   children?: ReactNode
+  followLocation?: boolean
   labels?: boolean
   routeTo?: { from: { x: number; y: number }; to: { x: number; y: number } } | null
 }
@@ -106,13 +107,13 @@ function IncidentMarkers({ markers, clusters, selectedId, onSelect, zoom }: Pick
 /** Shared geographic map. */
 export function MapView({ markers = [], selectedId, onSelect, heatmap, clusters, hazard, landmarks,
   responders, onSelectResponder, highlightResponder, user, pin, onPick, focus,
-  interactive = true, autoLocate, controls = true, controlsClassName, initialZoom = 1,
+  interactive = true, autoLocate, followLocation = false, controls = true, controlsClassName, initialZoom = 1,
   className, children, routeTo }: Props) {
   const [map, setMap] = useState<LeafletMap | null>(null)
   const [zoom, setZoom] = useState(mapZoom(focus?.zoom ?? initialZoom))
   const [tileError, setTileError] = useState(false)
   const [retry, setRetry] = useState(0)
-  const { location, locating, error: locationError, locate } = useDeviceLocation()
+  const { location, locating, error: locationError, locate } = useDeviceLocation(followLocation)
   const shouldLocate = useRef(autoLocate ?? (interactive && controls && !focus && !routeTo))
   const pickRef = useRef(onPick)
   pickRef.current = onPick
@@ -168,6 +169,9 @@ export function MapView({ markers = [], selectedId, onSelect, heatmap, clusters,
         </div>
         <button type="button" aria-label="Use current location" title="Use current location" disabled={locating} onClick={locate}
           className="glass-strong flex h-10 w-10 items-center justify-center rounded-[14px] text-accent shadow-float disabled:opacity-60"><LocateFixed size={18} className={locating ? 'animate-pulse' : ''} /></button>
+      </div>}
+      {followLocation && location && !locationError && <div className="pointer-events-none absolute bottom-6 left-2 z-[2] rounded-sm bg-surface/95 px-2 py-1 font-mono text-[10px] tabular-nums text-ink-2">
+        <span className="sr-only">Your latitude and longitude </span>{toLatLng(location).map(coordinate => coordinate.toFixed(4)).join(', ')} · ±{Math.round(location.accuracy)} m
       </div>}
       {(locationError || locating) && <div role="status" className="absolute inset-x-3 top-[30%] z-[3] mx-auto max-w-sm rounded-xl bg-surface p-3 text-center text-sm shadow-pop">
         {locating ? 'Finding your current location…' : locationError}

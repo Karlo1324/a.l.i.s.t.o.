@@ -7,7 +7,7 @@ import { toLatLng } from '../lib/geo'
 export type Stage = 'onboarding' | 'login' | 'register' | 'forgot' | 'app'
 export type Tab = 'home' | 'map' | 'reports' | 'profile'
 export type Route =
-  | { name: 'report'; category?: string }
+  | { name: 'report'; category?: string; draftId?: string }
   | { name: 'reportDetail'; id: string }
   | { name: 'notifications' }
   | { name: 'announcement'; id: string }
@@ -58,7 +58,7 @@ export function Screen({
     <div className="absolute inset-0 flex flex-col">
       {!headerless && (
         <div className={cx('absolute inset-x-0 top-0 z-30 transition-[background,box-shadow] duration-300', scrolled ? 'glass-strong shadow-[0_0.5px_0_var(--line-2)]' : '')}>
-          <div className="h-[54px]" />
+
           <div className="relative flex h-11 items-center justify-between px-2">
             <div className="flex min-w-[80px] items-center">
               {onBack && (
@@ -73,7 +73,7 @@ export function Screen({
           </div>
         </div>
       )}
-      <div onScroll={onScroll} className={cx('no-scrollbar flex-1 overflow-y-auto overscroll-contain', !headerless && 'pt-[98px]', bottomPad && 'pb-32', className)}>
+      <div onScroll={onScroll} className={cx('no-scrollbar flex-1 overflow-y-auto overscroll-contain', !headerless && 'pt-11', bottomPad && 'pb-32', className)}>
         {large && title && (
           <div className="px-5 pt-1 pb-4">
             {eyebrow && <div className="mb-0.5 text-[13px] font-semibold tracking-wide text-ink-3 uppercase">{eyebrow}</div>}

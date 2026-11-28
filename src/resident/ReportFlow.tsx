@@ -1,9 +1,11 @@
+import { prepareReportPhoto } from '../lib/reportPhoto'
 import { useEffect, useRef, useState } from 'react'
-import { Camera, Check, ChevronLeft, ImagePlus, Lightbulb, LocateFixed, MapPin, Minus, Pencil, Phone, Plus, ShieldCheck, X } from 'lucide-react'
-import { Button, CategoryIcon, Sheet, Switch, TextArea, TextInput } from '../components/ui'
+import { Camera, Check, ChevronLeft, ImagePlus, Lightbulb, LocateFixed, MapPin, Minus, Pencil, Phone, Plus, Save, ShieldCheck, X } from 'lucide-react'
+import { Button, CategoryIcon, Sheet, TextArea, TextInput } from '../components/ui'
+import { Switch } from './ResidentControls'
 import { MapView } from '../components/Map'
 import { CATEGORIES, CATEGORY_KEYS, type Category } from '../data/meta'
-import { type Incident } from '../data/records'
+import { LOCAL_RESIDENT, type Incident } from '../data/records'
 import { cx } from '../lib/format'
 import { useStore } from '../store'
 import { addressFor, useNav } from './common'
@@ -19,26 +21,38 @@ const SUGGEST: Record<Category, string[]> = {
   electrical: ['Downed power line', 'Sparking post', 'Exposed wiring'],
   other: ['Broken streetlight', 'Missing drainage cover', 'Damaged footbridge'],
 }
-export function ReportFlow({ initialCategory }: { initialCategory?: Category }) {
+export function ReportFlow({ initialCategory, draft }: { initialCategory?: Category; draft?: Incident }) {
   const nav = useNav()
-  const { submitReport } = useStore()
-  const [step, setStep] = useState(initialCategory ? 1 : 0)
-  const [category, setCategory] = useState<Category | null>(initialCategory ?? null)
-  const [title, setTitle] = useState('')
-  const [desc, setDesc] = useState('')
-  const [danger, setDanger] = useState(false)
-  const [affected, setAffected] = useState(0)
-  const [photos, setPhotos] = useState<string[]>([])
-  const [loc, setLoc] = useState<{ x: number; y: number } | null>(null)
+  const { submitReport, signedIn, resident, sessionCheck, refreshResidentSession } = useStore()
+  const [step, setStep] = useState(draft ? 4 : initialCategory ? 1 : 0)
+  const [category, setCategory] = useState<Category | null>(draft?.category ?? initialCategory ?? null)
+  const [title, setTitle] = useState(draft?.title ?? '')
+  const [desc, setDesc] = useState(draft?.description ?? '')
+  const [danger, setDanger] = useState(draft?.danger ?? false)
+  const [affectedText, setAffectedText] = useState(String(draft?.affected ?? 0))
+  const affected = Number(affectedText)
+  const [preparing, setPreparing] = useState(false)
+  const [photos, setPhotos] = useState<string[]>(draft?.photos ?? [])
+  const [loc, setLoc] = useState<{ x: number; y: number } | null>(draft ? {x: draft.x, y: draft.y} : null)
   const { location, locating, error: locationError, locate, cancel: cancelLocate } = useDeviceLocation()
-  const [landmark, setLandmark] = useState('')
-  const [anonymous, setAnonymous] = useState(false)
+  const [landmark, setLandmark] = useState(draft?.landmark ?? '')
+  const [anonymous, setAnonymous] = useState(draft?.anonymous ?? false)
   const [submitting, setSubmitting] = useState(false)
+  const [reportId] = useState(() => draft?.id ?? crypto.randomUUID())
+  const uploads = useRef(new Map<string, string>())
+  const [error, setError] = useState('')
+  const [sentToOfficials, setSentToOfficials] = useState(false)
   const [done, setDone] = useState<Incident | null>(null)
   const [confirmClose, setConfirmClose] = useState(false)
   const [flash, setFlash] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const sessionRefreshStarted = useRef(false)
 
+  useEffect(() => {
+    if (signedIn || sessionCheck !== 'ready' || sessionRefreshStarted.current) return
+    sessionRefreshStarted.current = true
+    void refreshResidentSession()
+  }, [refreshResidentSession, sessionCheck, signedIn])
   useEffect(() => { if (location) setLoc(location) }, [location])
   useEffect(() => {
     if (step === 3 && !loc) locate()
@@ -46,33 +60,92 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
   }, [step])
 
   const addr = loc ? addressFor(loc.x, loc.y) : null
-  const canNext = [!!category, title.trim().length >= 4 && desc.trim().length >= 10, true, !!loc && !locating, true][step]
+  const [showDetailErrors, setShowDetailErrors] = useState(false)
+  const titleError = title.trim().length < 5
+  const descriptionError = desc.trim().length < 10
+  function nextStep() {
+    if (step === 1 && (titleError || descriptionError)) {
+      setShowDetailErrors(true)
+      document.getElementById(titleError ? 'report-title' : 'report-description')?.focus()
+      return
+    }
+    setShowDetailErrors(false)
+    setStep(step + 1)
+  }
+  const canNext = [!!category, true, true, !!loc && !locating, true][step]
 
   const cameraRef = useRef<HTMLInputElement>(null)
   const takePhoto = () => cameraRef.current?.click()
-  const uploadPhotos = (files: FileList | null) => {
-    const selected = Array.from(files ?? []).filter((f) => f.type.startsWith('image/')).slice(0, 6 - photos.length)
-    setPhotos((list) => [...list, ...selected.map((f) => URL.createObjectURL(f))].slice(0, 6))
+  const uploadPhotos = async (files: FileList | null) => {
+    const selected = Array.from(files ?? []).slice(0, 6 - photos.length)
+    if (preparing || !selected.length) return
+    setPreparing(true)
+    setError('')
+    const failed: string[] = []
+    try {
+      for (const file of selected) {
+        try {
+          const preview = URL.createObjectURL(await prepareReportPhoto(file))
+          setPhotos(list => [...list, preview])
+        } catch {
+          failed.push(file.name)
+        }
+      }
+      if (failed.length) setError(`Could not prepare ${failed.join(', ')}. Choose a readable JPEG, PNG, or WebP photo.`)
+    } finally {
+      setPreparing(false)
+    }
   }
 
-  const submit = () => {
-    if (!category || !loc || !addr) return
-    const inc = submitReport({ category, title: title.trim(), description: desc.trim(), photos, x: loc.x, y: loc.y, address: addr.address, purok: addr.purok, landmark: landmark || undefined, danger, affected, anonymous })
-    setDone(inc)
+  const submit = async (saveLocally = false) => {
+    if (sessionCheck !== 'ready' || !category || !loc || !addr || submitting) return
+    const report = { category, title: title.trim(), description: desc.trim(), photos, x: loc.x, y: loc.y, address: addr.address, purok: addr.purok, landmark: landmark || undefined, danger, affected, anonymous }
+    setSubmitting(true)
+    setError('')
+    try {
+      // If the app already knows the resident is signed in, trust that and
+      // skip the extra getSession() round-trip that was racing with auth events.
+      // Only re-check the session when we currently look like a guest.
+      const currentResident = saveLocally ? null : signedIn ? resident : await refreshResidentSession()
+      if (currentResident === undefined) {
+        setError('Could not verify your account. Retry the account check before submitting.')
+        return
+      }
+      if (currentResident === null && !saveLocally) {
+        setError('Your resident account session is not active. Retry the account check or save this as a local guest draft.')
+        return
+      }
+      const reportResident = currentResident ?? LOCAL_RESIDENT
+      const authenticated = reportResident.id !== LOCAL_RESIDENT.id
+      const saved = authenticated ? await (await import('../lib/submitResidentReport')).submitResidentReport(
+        reportId, reportResident.id, report, location?.x === loc.x && location?.y === loc.y ? 'GPS' : 'MANUAL', uploads.current
+      ) : undefined
+      const reporter = { id: reportResident.id, name: reportResident.name, phone: reportResident.phone, verified: false }
+      setSentToOfficials(Boolean(saved))
+      setDone(submitReport(report, saved, reporter))
+    } catch (err) {
+      console.error('[submit] failed', err)
+      setError(err instanceof Error ? err.message : 'Submission failed. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (done)
     return (
-      <div className="absolute inset-0 z-40 flex animate-fade-in flex-col bg-bg px-6 pt-[120px] pb-12">
+      <div className="absolute inset-0 z-40 flex animate-fade-in flex-col gap-3 overflow-y-auto bg-bg px-6 pt-[clamp(48px,12vh,120px)] pb-12">
         <div className="flex flex-1 flex-col items-center text-center">
-          <div className="relative">
-            <span className="absolute inset-0 animate-pulse-ring rounded-full bg-[#22a06b]/30" />
-            <span className="relative flex h-24 w-24 animate-pop items-center justify-center rounded-full bg-[#22a06b] text-white shadow-[0_20px_40px_-15px_rgba(34,160,107,.8)]">
-              <Check size={48} strokeWidth={2.6} />
-            </span>
-          </div>
-          <h1 className="mt-8 text-[30px] font-bold tracking-tight">Report added locally</h1>
-          <p className="mt-2 max-w-[300px] text-[16px] leading-relaxed text-ink-2">Your report is available in this local workspace. It has not been sent to officials and will clear on refresh.</p>
+          {sentToOfficials ? (
+            <button type="button" aria-label="Track submitted report" onClick={() => nav.replace({ name: 'reportDetail', id: done.id })} className="flex size-24 animate-pop items-center justify-center rounded-full bg-success text-white">
+              <svg aria-hidden="true" width="48" height="48" viewBox="0 0 24 24" fill="none">
+                <path className="report-confirmation-check" d="m4 12 5 5L20 6" pathLength="1" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          ) : (
+            <span className="flex size-24 items-center justify-center rounded-full bg-surface-2 text-ink-2"><Save aria-hidden="true" size={40} /></span>
+          )}
+          <h1 className="mt-8 text-[30px] font-bold tracking-tight">{sentToOfficials ? 'Report submitted' : 'Report added locally'}</h1>
+          <p className="mt-2 max-w-[300px] text-[16px] leading-relaxed text-ink-2">{sentToOfficials ? 'Your report is pending barangay verification.' : 'Your guest report is stored locally until you refresh.'}</p>
           <div className="mt-8 w-full rounded-[22px] bg-surface p-4 text-left shadow-card ring-1 ring-line">
             <div className="flex items-center gap-3">
               <CategoryIcon category={done.category} size={44} />
@@ -81,9 +154,9 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
                 <div className="text-[13px] text-ink-3">{done.address}</div>
               </div>
             </div>
-            <div className="mt-4 flex items-center justify-between rounded-[14px] bg-surface-2 px-3.5 py-2.5">
-              <span className="text-[13px] text-ink-3">Reference no.</span>
-              <span className="font-mono text-[15px] font-semibold">{done.code}</span>
+            <div className="mt-4 flex flex-col items-start gap-1.5 rounded-[14px] bg-surface-2 px-3.5 py-2.5">
+              <span className="text-[13px] text-ink-2">Tracking number</span>
+              <span className="max-w-full select-all font-mono text-sm leading-relaxed font-semibold [overflow-wrap:anywhere]">{done.code}</span>
             </div>
           </div>
         </div>
@@ -99,15 +172,24 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
   return (
     <div className="absolute inset-0 z-40 flex flex-col bg-bg">
       {/* header */}
-      <div className="relative z-10 px-4 pt-[54px]">
+      <div className="relative z-10 px-4 pt-3">
         <div className="flex h-11 items-center justify-between">
-          <button onClick={() => (step === 0 || (initialCategory && step === 1) ? (category || title ? setConfirmClose(true) : nav.pop()) : setStep(step - 1))} className="flex items-center text-[17px] text-accent">
+          <button disabled={submitting || preparing} onClick={() => (step === 0 || (initialCategory && step === 1) ? (category || title ? setConfirmClose(true) : nav.pop()) : setStep(step - 1))} className="flex items-center text-[17px] text-accent">
             {step === 0 ? <X size={24} /> : <ChevronLeft size={28} strokeWidth={2.2} />}
             {step === 0 ? '' : 'Back'}
           </button>
           <span className="text-[17px] font-semibold">New report</span>
-          <button onClick={() => setConfirmClose(true)} className="text-[17px] text-ink-3">
+          <button disabled={submitting || preparing} onClick={() => setConfirmClose(true)} className="text-[17px] text-ink-3">
             Cancel
+          </button>
+        </div>
+        <div className="mt-2 flex items-center gap-3 rounded-[18px] bg-danger-soft p-3.5">
+          <Phone size={18} className="shrink-0 text-danger" />
+          <span className="flex-1 text-[13px] leading-snug text-ink">
+            <b>Life-threatening emergency?</b> Contact your local emergency service first.
+          </span>
+          <button onClick={() => nav.openSheet('hotlines')} className="text-[13px] font-semibold text-danger">
+            Call
           </button>
         </div>
         <div className="mt-2 flex gap-1.5">
@@ -118,11 +200,11 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
           ))}
         </div>
         <div className="mt-2 text-[13px] font-medium text-ink-3">
-          Step {step + 1} of 5 · {STEPS[step]}
+          Step {step + 1} of 5 · {STEPS[step]}{signedIn && <span className="ml-2 text-ink-2">· {resident.name}</span>}
         </div>
       </div>
 
-      <div key={step} className={cx('no-scrollbar relative flex-1 animate-slide-in overflow-y-auto', step === 3 ? '' : 'px-5 pt-4 pb-6')}>
+      <div key={step} className={cx('no-scrollbar relative min-h-0 flex-1 animate-slide-in overflow-y-auto', step === 3 ? '' : 'px-5 pt-4 pb-6')}>
         {step === 0 && (
           <>
             <h1 className="text-[28px] font-bold tracking-[-0.02em]">What happened?</h1>
@@ -152,15 +234,6 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
                 )
               })}
             </div>
-            <div className="mt-5 flex items-center gap-3 rounded-[18px] bg-danger-soft p-3.5">
-              <Phone size={18} className="shrink-0 text-danger" />
-              <span className="flex-1 text-[13px] leading-snug text-ink">
-                <b>Life-threatening emergency?</b> Contact your local emergency service first.
-              </span>
-              <button onClick={() => nav.openSheet('hotlines')} className="text-[13px] font-semibold text-danger">
-                Call
-              </button>
-            </div>
           </>
         )}
 
@@ -175,8 +248,9 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
             </div>
             <div className="mt-6 space-y-5">
               <div>
-                <label className="mb-1.5 block text-[13px] font-semibold text-ink-2">Short title</label>
-                <TextInput value={title} onChange={(e) => setTitle(e.target.value.slice(0, 60))} placeholder="e.g. Street flooding near covered court" />
+                <label className="mb-1.5 block text-[13px] font-semibold text-ink-2" htmlFor="report-title">Short title</label>
+                <TextInput id="report-title" aria-describedby="title-hint" aria-invalid={showDetailErrors && titleError} value={title} onChange={(e) => setTitle(e.target.value.slice(0, 60))} placeholder="e.g. Street flooding near covered court" />
+                <p id="title-hint" className={showDetailErrors && titleError ? "text-sm text-danger" : "text-sm text-ink-3"}>Use at least 5 characters.</p>
                 <div className="no-scrollbar mt-2 flex gap-2 overflow-x-auto">
                   {SUGGEST[category].map((s) => (
                     <button key={s} onClick={() => setTitle(s)} className="shrink-0 rounded-full bg-accent-soft px-3 py-1.5 text-[13px] font-medium text-accent">
@@ -186,10 +260,11 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
                 </div>
               </div>
               <div>
-                <label className="mb-1.5 flex justify-between text-[13px] font-semibold text-ink-2">
+                <label htmlFor="report-description" className="mb-1.5 flex justify-between text-[13px] font-semibold text-ink-2">
                   Description <span className="font-normal text-ink-3 tabular">{desc.length}/500</span>
                 </label>
-                <TextArea rows={5} value={desc} onChange={(e) => setDesc(e.target.value.slice(0, 500))} placeholder="What do you see? How big is the area? Is it getting worse? (English or Filipino)" />
+                <TextArea id="report-description" aria-describedby="description-hint" aria-invalid={showDetailErrors && descriptionError} rows={5} value={desc} onChange={(e) => setDesc(e.target.value.slice(0, 500))} placeholder="What do you see? How big is the area? Is it getting worse? (English or Filipino)" />
+                <p id="description-hint" className={showDetailErrors && descriptionError ? "text-sm text-danger" : "text-sm text-ink-3"}>Use at least 10 characters.</p>
               </div>
               <div className="overflow-hidden rounded-[18px] bg-surface ring-1 ring-line">
                 <div className="flex items-center gap-3 border-b border-line px-4 py-3.5">
@@ -205,11 +280,19 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
                     <div className="text-[13px] text-ink-3">Your best estimate</div>
                   </div>
                   <div className="flex items-center gap-1 rounded-full bg-surface-2 p-1">
-                    <button aria-label="Decrease" onClick={() => setAffected(Math.max(0, affected - 5))} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface shadow-card">
+                    <button aria-label="Decrease" onClick={() => setAffectedText(String(Math.max(0, affected - 5)))} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface shadow-card">
                       <Minus size={16} />
                     </button>
-                    <span className="w-10 text-center text-[16px] font-semibold tabular">{affected}</span>
-                    <button aria-label="Increase" onClick={() => setAffected(affected + 5)} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface shadow-card">
+                    <input aria-label="People affected" type="text" inputMode="numeric" pattern="[0-9]*"
+                      value={affectedText} placeholder="0"
+                      onChange={event => {
+                        const digits = event.target.value.replace(/[^0-9]/g, '')
+                        if (Number.isSafeInteger(Number(digits))) setAffectedText(digits)
+                      }}
+                      onFocus={event => event.target.select()}
+                      onBlur={() => setAffectedText(String(affected))}
+                      className="h-8 w-16 rounded-lg bg-surface text-center text-[16px] font-semibold tabular ring-1 ring-line" />
+                    <button aria-label="Increase" onClick={() => setAffectedText(String(Math.min(Number.MAX_SAFE_INTEGER, affected + 5)))} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface shadow-card">
                       <Plus size={16} />
                     </button>
                   </div>
@@ -222,7 +305,8 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
         {step === 2 && category && (
           <>
             <h1 className="text-[28px] font-bold tracking-[-0.02em]">Add photos</h1>
-            <p className="mt-1 text-[15px] text-ink-2">Clear photos help officials verify your report faster. Up to 6.</p>
+            <p className="mt-1 text-[15px] text-ink-2">Add up to six photos. Larger photos are compressed to under 5 MB each.</p>
+            {preparing && <p role="status" className="mt-2 text-sm text-ink-2">Preparing photos…</p>}
             <div className="mt-5 grid grid-cols-3 gap-2.5">
               {photos.map((p, i) => (
                 <div key={p + i} className="relative aspect-square animate-pop overflow-hidden rounded-[18px] bg-surface-2">
@@ -235,24 +319,24 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
               ))}
               {photos.length < 6 &&
                 Array.from({ length: Math.max(1, 3 - photos.length) }).map((_, i) => (
-                  <button key={`add${i}`} onClick={takePhoto} className="flex aspect-square flex-col items-center justify-center gap-1 rounded-[18px] border-[1.5px] border-dashed border-line-2 bg-surface text-ink-3 transition hover:text-accent">
+                  <button key={`add${i}`} disabled={preparing} onClick={takePhoto} className="flex aspect-square flex-col items-center justify-center gap-1 rounded-[18px] border-[1.5px] border-dashed border-line-2 bg-surface text-ink-3 transition hover:text-accent">
                     <Plus size={22} />
                     {i === 0 && <span className="text-[11px] font-semibold">Add</span>}
                   </button>
                 ))}
             </div>
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <Button variant="tinted" size="lg" icon={Camera} onClick={takePhoto} disabled={photos.length >= 6}>
+              <Button variant="tinted" size="lg" icon={Camera} onClick={takePhoto} disabled={preparing || photos.length >= 6}>
                 Camera
               </Button>
-              <Button variant="secondary" size="lg" icon={ImagePlus} onClick={() => fileRef.current?.click()} disabled={photos.length >= 6}>
+              <Button variant="secondary" size="lg" icon={ImagePlus} onClick={() => fileRef.current?.click()} disabled={preparing || photos.length >= 6}>
                 Library
               </Button>
-              <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { uploadPhotos(e.target.files); e.target.value = '' }} />
+              <input ref={cameraRef} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden" onChange={(e) => { uploadPhotos(e.target.files); e.target.value = '' }} />
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 multiple
                 className="hidden"
                 onChange={(e) => {
@@ -373,7 +457,7 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
             </div>
             <div className="mt-4 flex gap-2.5 px-1 text-[12px] leading-relaxed text-ink-3">
               <ShieldCheck size={16} className="mt-0.5 shrink-0" />
-              By submitting, you confirm this report is accurate. This report is stored only in the current workspace.
+              By submitting, you confirm this report is accurate. {signedIn ? 'Your report will be sent for verification.' : 'Guest drafts stay in this workspace until refresh.'}
             </div>
           </>
         )}
@@ -381,14 +465,19 @@ export function ReportFlow({ initialCategory }: { initialCategory?: Category }) 
 
       {step !== 3 || !locating ? (
         <div className={cx('relative z-10 px-5 pt-3 pb-9', step === 3 ? 'bg-surface' : 'glass-strong border-t border-line')}>
+          {error && <p role="alert" className="mb-2 text-sm text-danger">{error}</p>}
           {step < 4 ? (
-            <Button size="lg" className="w-full" disabled={!canNext} onClick={() => setStep(step + 1)}>
+            <Button size="lg" className="w-full" disabled={!canNext || preparing} onClick={nextStep}>
               {step === 2 && photos.length === 0 ? 'Skip for now' : step === 3 ? 'Confirm location' : 'Continue'}
             </Button>
           ) : (
-            <Button size="lg" className="w-full bg-alert text-white" loading={submitting} onClick={submit}>
-              Add report locally
-            </Button>
+            sessionCheck === 'failed' ? <Button onClick={() => void refreshResidentSession()}>Retry account check</Button> :
+            sessionCheck === 'checking' ? <Button size="lg" className="w-full" disabled>Checking account…</Button> :
+            signedIn ? <Button size="lg" className="w-full bg-alert text-white" loading={submitting} onClick={() => void submit()}>Submit report to officials</Button> :
+            <div className="space-y-2">
+              <Button size="lg" className="w-full" onClick={() => void refreshResidentSession()}>Check account to submit</Button>
+              <Button size="lg" variant="ghost" className="w-full" loading={submitting} onClick={() => void submit(true)}>Save local guest draft</Button>
+            </div>
           )}
         </div>
       ) : null}
@@ -424,4 +513,3 @@ function ReviewRow({ label, children, onEdit }: { label: string; children: React
     </div>
   )
 }
-

@@ -1,4 +1,5 @@
 import { defineConfig, type HtmlTagDescriptor, type Plugin } from 'vite'
+import { residentPwa } from './resident/pwa-build'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import fs from 'node:fs'
@@ -15,11 +16,13 @@ export default defineConfig(({ mode }) => {
   return {
     base: process.env.FIGMA_PUBLIC_URL ? `${process.env.FIGMA_PUBLIC_URL}/` : '/',
     build: {
+      rolldownOptions: { input: { main: 'index.html', resident: 'resident/index.html' } },
       sourcemap: emitSourcemaps ? 'inline' : false,
       minify: !emitSourcemaps,
     },
     plugins: [
 react(),
+      residentPwa(),
       tailwindcss(),
       figmaSiteConfiguration(siteConfiguration),
       figmaErrorOverlayReplay(),

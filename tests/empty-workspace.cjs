@@ -7,6 +7,10 @@ const { renderToString } = require('react-dom/server')
 
 for (const extension of ['.ts', '.tsx']) {
   require.extensions[extension] = (module, filename) => {
+    if (filename.endsWith('/lib/supabase.ts')) {
+      module.exports = { supabase: {} }
+      return
+    }
     if (filename.endsWith('/components/Map.tsx')) {
       module.exports = { MapView: ({ children }) => React.createElement('div', null, children) }
       return
@@ -47,14 +51,14 @@ function render(component, role = 'official', props = {}, param) {
 const adminScreens = { Overview: 'Overview', Analytics: 'Analytics', Assignment: 'Assignment', Verification: 'Verification', Tasks: 'Tasks', Monitoring: 'Monitoring', Incidents: 'Incidents', Users: 'UsersPage', Settings: 'SettingsPage', Activity: 'ActivityPage' }
 for (const [file, name] of Object.entries(adminScreens)) {
   const component = require(`../src/admin/${file}.tsx`)[name]
-  for (const role of ['official', 'responder', 'admin']) render(component, role)
+  for (const role of ['official', 'admin']) render(component, role)
 }
 const residentScreens = { Home: ['Home'], Profile: ['Profile', 'PersonalInfo', 'NotifSettings'], Notifications: ['Notifications'], Reports: ['MyReports'], MapScreen: ['MapScreen'], Auth: ['Login', 'Register', 'Forgot'], ReportFlow: ['ReportFlow'] }
 for (const [file, names] of Object.entries(residentScreens)) {
   for (const name of names) render(require(`../src/resident/${file}.tsx`)[name])
 }
 render(require('../src/resident/Onboarding.tsx').Onboarding, 'official', { onLightStatus: noop })
-render(require('../src/admin/Login.tsx').StaffLogin, 'official', { onDone: noop, onExit: noop })
+render(require('../src/admin/Login.tsx').StaffLogin, 'official', { onAuthenticated: noop, onExit: noop })
 render(require('../src/App.tsx').default)
 
 // User-entered data must not gain fabricated photos, AI results, or verified identity.
@@ -75,4 +79,30 @@ report.status = 'verified'
 render(require('../src/admin/Assignment.tsx').Assignment, 'official', {}, report.id)
 render(require('../src/admin/Analytics.tsx').Analytics)
 data.INITIAL_INCIDENTS.length = 0
+// A successful login must render the account on both resident profile screens.
+const storeModule = require('../src/store.tsx')
+const originalUseStore = storeModule.useStore
+const signedInStore = { ...currentStore, signedIn: true, resident: {
+  ...data.LOCAL_RESIDENT, id: 'test-resident', name: 'Test Resident', email: 'test@example.invalid'
+} }
+try {
+  storeModule.useStore = () => signedInStore
+  const { Profile, PersonalInfo } = require('../src/resident/Profile.tsx')
+  for (const screen of [Profile, PersonalInfo]) {
+    const html = render(screen)
+    assert.match(html, /Test Resident/)
+    assert.match(html, /test@example.invalid/)
+    assert.doesNotMatch(html, /Guest workspace/)
+  }
+  const { ReportFlow } = require('../src/resident/ReportFlow.tsx')
+  const form = /type="password"/
+  assert.doesNotMatch(render(ReportFlow), form)
+  for (const sessionCheck of ['checking', 'failed', 'ready']) {
+    storeModule.useStore = () => ({ ...signedInStore, signedIn: false, sessionCheck })
+    const html = render(ReportFlow)
+    assert.doesNotMatch(html, form)
+  }
+} finally {
+  storeModule.useStore = originalUseStore
+}
 console.log(`PASS: ${count} server-render checks; empty collections; user-entered reports without fabricated AI, photos, or identity. Browser map interactions are not covered.`)

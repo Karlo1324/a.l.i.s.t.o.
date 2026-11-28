@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowUpRight, Building, ChevronRight, LayoutDashboard, Moon, Smartphone, Sun } from 'lucide-react'
-import { LogoMark, Segmented } from './components/ui'
+import { LogoMark } from './components/ui'
+import { Segmented } from './resident/ResidentControls'
 import { ResidentApp, type ResidentJump } from './resident/ResidentApp'
 import { AdminApp } from './admin/AdminApp'
 import { StoreProvider, useStore } from './store'
@@ -38,7 +39,7 @@ function Shell() {
 export function ThemeToggle({ className }: { className?: string }) {
   const { dark, setTheme } = useStore()
   return (
-    <button onClick={() => setTheme(dark ? 'light' : 'dark')} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} className={cx('flex h-10 w-10 items-center justify-center rounded-full bg-surface text-ink-2 shadow-card ring-1 ring-line transition hover:text-ink', className)}>
+    <button onClick={event => setTheme(dark ? 'light' : 'dark', event.currentTarget)} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} className={cx('flex h-10 w-10 items-center justify-center rounded-full bg-surface text-ink-2 shadow-card ring-1 ring-line transition hover:text-ink', className)}>
       {dark ? <Sun size={18} /> : <Moon size={18} />}
     </button>
   )
@@ -148,6 +149,10 @@ function ResidentShowcase({ onHome, onAdmin }: { onHome: () => void; onAdmin: ()
     window.addEventListener('resize', fn)
     return () => window.removeEventListener('resize', fn)
   }, [])
+
+  useEffect(() => {
+    if (!wide) window.location.replace(new URL('./resident/', document.baseURI).href)
+  }, [wide])
 
   if (!wide) return <ResidentApp framed={false} jump={jump} />
 

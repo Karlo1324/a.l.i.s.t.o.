@@ -16,8 +16,8 @@ export interface AdminSettings {
 }
 
 export interface AdminCtxValue {
+  token: string
   role: Exclude<Role, 'resident'>
-  setRole: (r: Exclude<Role, 'resident'>) => void
   page: Page
   param?: string
   go: (p: Page, param?: string) => void
@@ -30,15 +30,13 @@ export const AdminCtx = createContext<AdminCtxValue | null>(null)
 export const useAdmin = () => useContext(AdminCtx)!
 
 export const WORKSPACE_USERS: Record<Exclude<Role, 'resident'>, AdminCtxValue['user']> = {
-  official: { name: 'Local workspace', first: '', title: 'Official view', email: '' },
-  responder: { name: 'Local workspace', first: '', title: 'Responder view', email: '' },
+  official: { name: 'Local workspace', first: '', title: 'Responder (Official) view', email: '' },
   admin: { name: 'Local workspace', first: '', title: 'Administrator view', email: '' },
 }
 
 export const ACCESS: Record<Exclude<Role, 'resident'>, Page[]> = {
   official: ['overview', 'incidents', 'verify', 'assign', 'tasks', 'monitor', 'analytics', 'activity', 'settings'],
-  responder: ['overview', 'tasks', 'monitor', 'activity', 'settings'],
-  admin: ['overview', 'incidents', 'monitor', 'analytics', 'activity', 'users', 'settings'],
+  admin: ['overview', 'incidents', 'verify', 'assign', 'tasks', 'monitor', 'analytics', 'activity', 'users', 'settings'],
 }
 
 export function PageHeader({ title, subtitle, actions, eyebrow }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; eyebrow?: ReactNode }) {

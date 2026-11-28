@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, ClipboardCheck, Copy, Download, Ellipsis, Eye, FunnelX, Inbox, Send, SlidersHorizontal, TriangleExclamationPoint, X } from 'lucide-react'
 import { Avatar, Button, CategoryIcon, Checkbox, Chip, EmptyState, IconButton, PriorityPill, SearchField, StatusPill } from '../components/ui'
 import { CATEGORIES, CATEGORY_KEYS, PRIORITIES, PRIORITY_KEYS, PUROKS, STATUSES, STATUS_KEYS, type Category, type Priority, type Status } from '../data/meta'
-import { RESPONDERS } from '../data/records'
 import { cx, fmtDateTime, timeAgo } from '../lib/format'
 import { useStore } from '../store'
 import { downloadCSV, Menu, PageHeader, Select, useAdmin } from './common'
@@ -13,7 +12,7 @@ const PRI_ORDER: Record<Priority, number> = { critical: 0, high: 1, medium: 2, l
 
 export function Incidents() {
   const ctx = useAdmin()
-  const { incidents, updateIncident, toast } = useStore()
+  const { incidents, toast, refreshOfficialFeed } = useStore()
   const [status, setStatus] = useState<Status | 'all'>('all')
   const [cat, setCat] = useState<Category | 'all'>('all')
   const [pri, setPri] = useState<Priority | 'all' | 'unset'>('all')
@@ -59,7 +58,7 @@ export function Incidents() {
   const exportRows = (list: typeof incidents) =>
     downloadCSV('alisto-incidents.csv', [
       ['Code', 'Title', 'Category', 'Status', 'Priority', 'Purok', 'Address', 'Reported', 'Reporter', 'Assignee'],
-      ...list.map((i) => [i.code, i.title, CATEGORIES[i.category].label, STATUSES[i.status].label, i.priority ? PRIORITIES[i.priority].label : '', i.purok, i.address, fmtDateTime(i.createdAt), i.reporter.name, RESPONDERS.find((r) => r.id === i.assignee)?.name ?? '']),
+      ...list.map((i) => [i.code, i.title, CATEGORIES[i.category].label, STATUSES[i.status].label, i.priority ? PRIORITIES[i.priority].label : '', i.purok, i.address, fmtDateTime(i.createdAt), i.reporter.name, i.assigneeName ?? '']),
     ])
 
   return (
@@ -72,7 +71,7 @@ export function Incidents() {
             <Button variant="secondary" icon={Download} onClick={() => (exportRows(filtered), toast(`Exported ${filtered.length} incidents to CSV`, 'success'))}>
               Export CSV
             </Button>
-            {ctx.role === 'official' && (
+            {(ctx.role === 'official' || ctx.role === 'admin') && (
               <Button icon={ClipboardCheck} onClick={() => ctx.go('verify')}>
                 Verification queue
               </Button>
@@ -130,11 +129,17 @@ export function Incidents() {
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() => {
+                onClick={async () => {
                   const n = sel.filter((id) => incidents.find((i) => i.id === id)?.status === 'pending')
-                  n.forEach((id) => updateIncident(id, { status: 'review' }, { note: 'Bulk: opened for review' }))
-                  toast(`${n.length} incidents moved to Under Review`, 'success')
-                  setSel([])
+                  try {
+                    const { updateStaffReport } = await import('../lib/staffAuth')
+                    await Promise.all(n.map(reportId => updateStaffReport(ctx.token, { reportId, action: 'start_review' })))
+                    refreshOfficialFeed()
+                    toast(`${n.length} incidents moved to Under Review`, 'success')
+                    setSel([])
+                  } catch (error) {
+                    toast(error instanceof Error ? error.message : 'Could not update the selected reports.', 'danger')
+                  }
                 }}
               >
                 Mark Under Review
@@ -168,7 +173,6 @@ export function Incidents() {
             </thead>
             <tbody>
               {rows.map((i) => {
-                const r = RESPONDERS.find((x) => x.id === i.assignee)
                 return (
                   <tr key={i.id} onClick={() => setDrawer(i.id)} className={cx('cursor-pointer border-b border-line transition last:border-0 hover:bg-surface-2', sel.includes(i.id) && 'bg-accent-soft/50')}>
                     <td className="w-[76px] min-w-[76px] py-3.5 pl-5 pr-4 align-middle" onClick={(e) => e.stopPropagation()}>
@@ -206,10 +210,10 @@ export function Incidents() {
                       <StatusPill status={i.status} size="sm" />
                     </td>
                     <td className="py-3 pr-4">
-                      {r ? (
+                      {i.assigneeName ? (
                         <span className="flex items-center gap-2">
-                          <Avatar name={r.name} size={24} />
-                          <span className="max-w-[120px] truncate text-ink-2">{r.name}</span>
+                          <Avatar name={i.assigneeName} size={24} />
+                          <span className="max-w-[120px] truncate text-ink-2">{i.assigneeName}</span>
                         </span>
                       ) : (
                         <span className="text-ink-3">—</span>
@@ -220,8 +224,8 @@ export function Incidents() {
                         trigger={(open) => <IconButton icon={Ellipsis} label="Actions" size={30} onClick={open} />}
                         items={[
                           { label: 'View details', icon: Eye, onClick: () => setDrawer(i.id) },
-                          ...(ctx.role === 'official' && (i.status === 'pending' || i.status === 'review') ? [{ label: 'Open verification', icon: ClipboardCheck, onClick: () => ctx.go('verify', i.id) }] : []),
-                          ...(ctx.role === 'official' && i.status === 'verified' ? [{ label: 'Assess & dispatch', icon: Send, onClick: () => ctx.go('assign', i.id) }] : []),
+                          ...((ctx.role === 'official' || ctx.role === 'admin') && (i.status === 'pending' || i.status === 'review') ? [{ label: 'Open verification', icon: ClipboardCheck, onClick: () => ctx.go('verify', i.id) }] : []),
+                          ...((ctx.role === 'official' || ctx.role === 'admin') && (i.status === 'verified' || (i.status === 'assigned' && i.acceptanceStatus === 'declined')) ? [{ label: 'Assess & dispatch', icon: Send, onClick: () => ctx.go('assign', i.id) }] : []),
                           { label: 'Copy reference', icon: Copy, onClick: () => (navigator.clipboard?.writeText(i.code), toast(`${i.code} copied`)) },
                         ]}
                       />

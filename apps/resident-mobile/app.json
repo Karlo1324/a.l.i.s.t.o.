@@ -3,12 +3,33 @@
     "name": "A.L.I.S.T.O. Resident",
     "slug": "alisto-resident",
     "version": "1.0.0",
-    "platforms": ["android"],
-    "android": { "package": "com.alisto.resident" },
+    "platforms": [
+      "android"
+    ],
+    "android": {
+      "package": "com.alisto.resident",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "allowBackup": false
+    },
     "plugins": [
-      ["expo-image-picker", { "microphonePermission": false, "cameraPermission": false }],
+      [
+        "expo-image-picker",
+        {
+          "microphonePermission": false,
+          "cameraPermission": false
+        }
+      ],
       "expo-location",
       "expo-sqlite"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "81dbb864-ef8c-464e-af72-5011a1b1ecee"
+      }
+    },
+    "icon": "./assets/logo-light.png"
   }
 }

@@ -12,7 +12,7 @@ import {
 export type Category = 'flooding' | 'road' | 'building' | 'tree' | 'landslide' | 'electrical' | 'other'
 export type Status = 'pending' | 'review' | 'verified' | 'assigned' | 'progress' | 'resolved' | 'rejected'
 export type Priority = 'critical' | 'high' | 'medium' | 'low'
-export type Role = 'resident' | 'official' | 'responder' | 'admin'
+export type Role = 'resident' | 'official' | 'admin'
 
 export const CATEGORIES: Record<Category, { label: string; short: string; color: string; icon: LucideIcon; desc: string }> = {
   flooding: { label: 'Flooding', short: 'Flood', color: '#2f7cf6', icon: WavesHorizontal, desc: 'Rising water, clogged drains, submerged roads' },
@@ -47,8 +47,7 @@ export const PRIORITY_KEYS = Object.keys(PRIORITIES) as Priority[]
 
 export const ROLES: Record<Role, { label: string; color: string; desc: string }> = {
   resident: { label: 'Resident', color: '#5b8def', desc: 'Submit reports, track status, receive advisories' },
-  official: { label: 'Barangay Official', color: '#1f4fd1', desc: 'Verify incidents, set priority, dispatch responders' },
-  responder: { label: 'Responder / Inspector', color: '#ef8a2b', desc: 'Receive assignments, post field updates, close tasks' },
+  official: { label: 'Responder (Official)', color: '#1f4fd1', desc: 'Verify incidents, dispatch responders, receive assignments and post field updates' },
   admin: { label: 'Administrator', color: '#e5372a', desc: 'Manage users, roles, permissions and system settings' },
 }
 

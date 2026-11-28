@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { Lock, Mail, User } from 'lucide-react'
 import { Button, Field, LogoMark, TextInput } from '../components/ui'
+import { useStore } from '../store'
 import { supabase } from '../lib/supabase'
 import { Screen, useNav } from './common'
 
 export function Login() {
   const nav = useNav()
+  const { applyResidentUser } = useStore()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -16,7 +18,7 @@ export function Login() {
     setError('')
     setLoading(true)
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     })
@@ -28,6 +30,7 @@ export function Login() {
       return
     }
 
+    applyResidentUser(data.session.user)
     nav.setStage('app')
   }
 
@@ -85,7 +88,13 @@ export function Login() {
           type="button"
           variant="secondary"
           className="w-full"
-          onClick={() => nav.setStage('app')}
+          disabled={loading}
+          onClick={async () => {
+            const { error } = await supabase.auth.signOut({ scope: 'local' })
+            if (error) { setError(error.message); return }
+            applyResidentUser(null)
+            nav.setStage('app')
+          }}
         >
           Continue as guest
         </Button>
@@ -100,9 +109,11 @@ export function Login() {
 
 export function Register() {
   const nav = useNav()
+  const { applyResidentUser, toast } = useStore()
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [accountType, setAccountType] = useState<'resident' | 'responder'>('resident')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(false)
@@ -117,8 +128,8 @@ export function Register() {
       email: email.trim(),
       password,
       options: {
-        data: { full_name: fullName.trim() },
-        emailRedirectTo: window.location.origin + '/',
+        data: { full_name: fullName.trim(), requested_role: accountType === 'responder' ? 'OFFICIAL' : 'RESIDENT' },
+        emailRedirectTo: new URL('./', window.location.href).href,
       },
     })
 
@@ -130,10 +141,14 @@ export function Register() {
     }
 
     if (!data.session) {
-      setNotice('Check your email to confirm your account.')
+      setNotice(accountType === 'responder'
+        ? 'Check your email to confirm your account. Responder access will remain pending until an administrator approves the request.'
+        : 'Check your email to confirm your account.')
       return
     }
 
+    applyResidentUser(data.session.user)
+    if (accountType === 'responder') toast('Responder access requested. An administrator must approve it before staff access is enabled.')
     nav.setStage('app')
   }
 
@@ -177,6 +192,23 @@ export function Register() {
           />
         </Field>
 
+        <Field label="Account type">
+          <div className="grid grid-cols-2 gap-2 rounded-xl bg-surface-2 p-1 ring-1 ring-line" role="group" aria-label="Account type">
+            {(['resident', 'responder'] as const).map(type => (
+              <button
+                key={type}
+                type="button"
+                aria-pressed={accountType === type}
+                onClick={() => setAccountType(type)}
+                className={`min-h-10 rounded-lg px-3 text-sm font-semibold transition ${accountType === type ? 'bg-surface text-accent shadow-sm' : 'text-ink-2 hover:bg-surface'}`}
+              >
+                {type === 'resident' ? 'Resident' : 'Responder'}
+              </button>
+            ))}
+          </div>
+          {accountType === 'responder' && <p className="mt-2 text-sm text-ink-3">Responder access requires administrator approval. Until approved, this account remains a resident.</p>}
+        </Field>
+
         <Field label="Password">
           <TextInput
             icon={Lock}
@@ -209,7 +241,13 @@ export function Register() {
           type="button"
           variant="secondary"
           className="w-full"
-          onClick={() => nav.setStage('app')}
+          disabled={loading}
+          onClick={async () => {
+            const { error } = await supabase.auth.signOut({ scope: 'local' })
+            if (error) { setError(error.message); return }
+            applyResidentUser(null)
+            nav.setStage('app')
+          }}
         >
           Continue as guest
         </Button>

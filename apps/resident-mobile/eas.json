@@ -2,7 +2,13 @@
   "build": {
     "preview": {
       "distribution": "internal",
-      "android": { "buildType": "apk" }
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://oxqhudrluypybvaftghw.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_bQnTDZMeaNnGxGcGw3tguQ_ZCn9go_I"
+      }
     }
   }
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { BellOff, Megaphone, Share, Tent, TriangleExclamationPoint, Users } from 'lucide-react'
-import { Button, EmptyState, Segmented } from '../components/ui'
+import { BellOff, Megaphone, Share2, Tent, TriangleExclamationPoint, Users } from 'lucide-react'
+import { Button, EmptyState } from '../components/ui'
+import { Segmented } from './ResidentControls'
 import { ANNOUNCEMENTS } from '../data/records'
 import { STATUSES } from '../data/meta'
 import { cx, fmtDateTime, timeAgo } from '../lib/format'
@@ -87,7 +88,7 @@ export function AnnouncementDetail({ id }: { id: string }) {
   if (!a) return <Screen title="Advisory" onBack={nav.pop}><EmptyState icon={Megaphone} title="No advisory available" /></Screen>
   const lv = LEVEL[a.level]
   return (
-    <Screen title="Advisory" large={false} onBack={nav.pop} right={<button aria-label="Share" onClick={() => toast('Advisory sharing is unavailable without a server')} className="p-2 text-accent"><Share size={20} /></button>}>
+    <Screen title="Advisory" large={false} onBack={nav.pop} right={<button aria-label="Share" onClick={() => toast('Advisory sharing is unavailable without a server')} className="p-2 text-accent"><Share2 size={20} /></button>}>
       <div className="px-5">
         {a.image && <img src={a.image} alt="" className="mb-5 h-52 w-full rounded-[24px] object-cover shadow-card" />}
         <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-bold tracking-wide uppercase" style={{ background: `color-mix(in srgb, ${lv.color} 14%, transparent)`, color: lv.color }}>

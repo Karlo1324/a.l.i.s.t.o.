@@ -1,7 +1,13 @@
 # A.L.I.S.T.O. Resident for Android
 
-From this directory, run `npm install`, then `npm run android` with an Android emulator running or a USB device connected. For Metro alone, use `npm start`. Check TypeScript with `npm run typecheck`.
+This Expo project uses React Native views for the resident app. Run commands here, inside `apps/resident-mobile`.
 
-To create an installable preview APK, sign in to Expo and run `npx eas-cli@latest build --platform android --profile preview` from this directory. On the first build, link the mobile app to an Expo project and configure Android signing when prompted.
+```sh
+npm ci
+npm run typecheck
+npx eas-cli@latest build --platform android --profile preview
+```
 
-Residents can save and reopen local drafts with a category, description, photo and GPS coordinates or landmark. Drafts live in the app’s SQLite database. A Supabase session and a report submission API are still needed for accounts and delivery to staff.
+The preview profile generates an installable APK and supplies the public Supabase configuration. For a local development build, set `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` in .env.local and run `npm run android` with an Android device or emulator attached. The Android Keystore session module requires a native build.
+
+Sign in with a resident account, open **Add an incident**, and complete category, details, photos, location and review. Successful submission shows the reference from Supabase. Refresh the official verification queue and match that reference. Guest drafts remain on the device.

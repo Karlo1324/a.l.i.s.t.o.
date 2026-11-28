@@ -4,11 +4,11 @@
 
 | App | What you can do | Where the data lives |
 | --- | --- | --- |
-| Resident web app | Enter as a guest, report an incident with a location and optional photos, and track its status. | Reports stay in browser memory until the page reloads. |
-| Staff web dashboard | Review reports in the same workspace, update their status, and view counts by category and status. | The dashboard reads the current web workspace. |
+| Resident web app | Sign in, report an incident with a location and optional photos, and track its status. | Signed-in reports are stored in Supabase; guest/demo reports stay in browser memory. |
+| Staff web dashboard | Review or reject reports, dispatch responders, and track task acceptance and progress. | Staff reads and updates barangay-scoped Supabase reports when configured. |
 | Resident Android app | Save and reopen a draft with a category, description, photo, and GPS coordinates or a typed landmark. | Drafts persist in SQLite on the device. |
 
-Resident accounts, delivery of Android reports to staff, and the resident AI analytics assistant are planned integrations. The current web sign-up screen is a placeholder.
+Android report delivery to staff and the resident AI analytics assistant remain planned integrations. Web resident accounts and report submission use Supabase when configured.
 
 ## Quick start
 
@@ -19,7 +19,7 @@ Install Node.js 22 with npm. From the repository root, run the setup script to i
 npm run dev
 ```
 
-Open [localhost on port 8443](http://localhost:8443/). To try the workflow, choose **Resident App**, continue as a guest, and add an incident. Then open the [staff dashboard](http://localhost:8443/#admin) in the **same tab** to review it. Refreshing or opening a second tab starts a new workspace.
+Open [localhost on port 8443](http://localhost:8443/). Without Supabase configuration, the resident guest flow and staff dashboard use a local demo workspace. With Supabase configured, sign in as a resident to submit reports and use the staff dashboard to review and dispatch them.
 
 ## Run the Android app
 
@@ -42,4 +42,8 @@ To check persistence, save a draft, close the app, and reopen it on the same dev
 | `apps/resident-mobile/` | `npm start` | Start the Expo development server. |
 | `apps/resident-mobile/` | `npm run typecheck` | Check the mobile TypeScript source after installing dependencies. |
 
-The web screens live in [src/resident](src/resident) and [src/admin](src/admin). The [web store](src/store.tsx) handles in-memory reports and status updates. The Android [app](apps/resident-mobile/App.tsx) and [draft storage](apps/resident-mobile/drafts.ts) live together in the mobile directory.
+The web screens live in [src/resident](src/resident) and [src/admin](src/admin). The [web store](src/store.tsx) coordinates report state, while Supabase RPCs persist signed-in resident submissions and staff workflow changes. The Android [app](apps/resident-mobile/App.tsx) and [draft storage](apps/resident-mobile/drafts.ts) live together in the mobile directory.
+
+## Supabase staff workflow
+
+The staff report review, barangay-scoped responder directory, dispatch, explicit task acceptance, resident decision notifications, and responder role requests require the SQL migrations in `supabase/migrations` to be applied to the configured Supabase project in filename order. Migration `202611250012_admin_dispatch_acceptance.sql` adds the persisted review and dispatch actions; `202611250013_resident_report_decision_notifications.sql` adds durable in-app notifications for accepted and rejected reports; `202611250014_dispatch_priority_compatibility.sql` keeps dispatch priority independent of legacy report-priority constraints; `202611250015_responder_access_requests.sql` adds admin-reviewed responder registration; and `202611280001_resident_report_category_lookup.sql` makes mobile report category resolution tolerant of category-code naming differences and replaces opaque missing-row errors with actionable messages. Responders must have an active `OFFICIAL` profile assigned to the report's barangay. Email, SMS, and push delivery are not connected.

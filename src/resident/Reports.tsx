@@ -1,18 +1,19 @@
 import { useState } from 'react'
-import { ChevronLeft, CircleCheck, ClipboardList, MapPin, MessageCircle, MessageSquarePlus, Phone, Share, Sparkles, Star, Truck, Undo2, XCircle } from 'lucide-react'
-import { Avatar, Button, CategoryIcon, CategoryTag, EmptyState, Segmented, Sheet, StatusPill, TextArea } from '../components/ui'
+import { ChevronLeft, CircleCheck, ClipboardList, MapPin, MessageCircle, MessageSquarePlus, Phone, Share2, Sparkles, Star, Truck, Undo2, XCircle } from 'lucide-react'
+import { Avatar, Button, CategoryIcon, CategoryTag, EmptyState, Sheet, StatusPill, TextArea } from '../components/ui'
+import { Segmented } from './ResidentControls'
 import { MapView } from '../components/Map'
 import { CATEGORIES, STATUS_FLOW, STATUSES } from '../data/meta'
-import { LOCAL_RESIDENT, RESPONDERS } from '../data/records'
+import { RESPONDERS } from '../data/records'
 import { cx, fmtDateTime, fmtTime, timeAgo } from '../lib/format'
 import { useStore } from '../store'
 import { Screen, StatusTrack, useNav } from './common'
 
 export function MyReports() {
   const nav = useNav()
-  const { incidents } = useStore()
+  const { resident, incidents } = useStore()
   const [seg, setSeg] = useState<'active' | 'closed' | 'all'>('active')
-  const mine = incidents.filter((i) => i.reporter.id === LOCAL_RESIDENT.id)
+  const mine = incidents.filter((i) => i.reporter.id === resident.id)
   const shown = mine.filter((i) => (seg === 'all' ? true : seg === 'active' ? !['resolved', 'rejected'].includes(i.status) : ['resolved', 'rejected'].includes(i.status)))
   const resolved = mine.filter((i) => i.status === 'resolved').length
 
@@ -70,7 +71,7 @@ export function MyReports() {
 
 export function ReportDetail({ id }: { id: string }) {
   const nav = useNav()
-  const { getIncident, toast, updateIncident } = useStore()
+  const { resident, signedIn, getIncident, toast, updateIncident } = useStore()
   const inc = getIncident(id)
   const [photoIdx, setPhotoIdx] = useState(0)
   const [addInfo, setAddInfo] = useState(false)
@@ -78,12 +79,13 @@ export function ReportDetail({ id }: { id: string }) {
   const [withdraw, setWithdraw] = useState(false)
   const [rating, setRating] = useState(0)
   if (!inc) return null
-  const mine = inc.reporter.id === LOCAL_RESIDENT.id
+  const mine = inc.reporter.id === resident.id
   const responder = RESPONDERS.find((r) => r.id === inc.assignee)
   const idx = STATUS_FLOW.indexOf(inc.status)
 
   return (
     <Screen headerless bottomPad={false} className="pb-12">
+      {!signedIn && mine && <Button className="m-4" onClick={() => nav.push({ name: 'report', draftId: inc.id })}>Send guest report to officials</Button>}
       {/* hero */}
       <div className="relative h-[340px] bg-surface-3">
         {inc.photos.length ? (
@@ -101,12 +103,12 @@ export function ReportDetail({ id }: { id: string }) {
           </div>
         )}
         <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/45 to-transparent" />
-        <div className="absolute inset-x-0 top-[54px] flex items-center justify-between px-4">
+        <div className="absolute inset-x-0 top-3 flex items-center justify-between px-4">
           <button onClick={nav.pop} aria-label="Back" className="glass-strong flex h-10 w-10 items-center justify-center rounded-full shadow-float">
             <ChevronLeft size={24} />
           </button>
           <button onClick={() => toast('Report sharing is unavailable without a server')} aria-label="Share" className="glass-strong flex h-10 w-10 items-center justify-center rounded-full shadow-float">
-            <Share size={18} />
+            <Share2 size={18} />
           </button>
         </div>
         {inc.photos.length > 1 && (
@@ -265,7 +267,7 @@ export function ReportDetail({ id }: { id: string }) {
           onClick={() => {
             setAddInfo(false)
             setInfo('')
-            updateIncident(inc.id, { timeline: [...inc.timeline, { status: inc.status, at: new Date(), by: inc.anonymous ? 'Anonymous reporter' : LOCAL_RESIDENT.name, note: info.trim() }] })
+            updateIncident(inc.id, { timeline: [...inc.timeline, { status: inc.status, at: new Date(), by: inc.anonymous ? 'Anonymous reporter' : resident.name, note: info.trim() }] })
             toast('Information added to the local report', 'success')
           }}
         >
@@ -281,7 +283,7 @@ export function ReportDetail({ id }: { id: string }) {
             variant="danger"
             className="mt-5 w-full"
             onClick={() => {
-              updateIncident(inc.id, { status: 'rejected', rejectReason: 'Withdrawn by the resident.' }, { note: 'Withdrawn by resident', by: LOCAL_RESIDENT.name, role: 'resident' })
+              updateIncident(inc.id, { status: 'rejected', rejectReason: 'Withdrawn by the resident.' }, { note: 'Withdrawn by resident', by: resident.name, role: 'resident' })
               setWithdraw(false)
               toast('Report withdrawn')
             }}

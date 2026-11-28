@@ -6,15 +6,23 @@ import { useStore } from '../store'
 import { Kpi, PageHeader, Panel, useAdmin } from './common'
 import { IncidentDrawer } from './IncidentDrawer'
 
+import { BroadcastForm } from './BroadcastForm'
+
+import { OfficialOverview } from './OfficialOverview'
+
 export function Overview() {
+  return useAdmin().role === 'official' ? <OfficialOverview /> : <StandardOverview />
+}
+
+function StandardOverview() {
   const ctx = useAdmin()
   const { incidents, staff, audit } = useStore()
   const [selected, setSelected] = useState<string | null>(null)
-  const list = ctx.role === 'responder' ? incidents.filter((i) => !!ctx.user.responderId && i.assignee === ctx.user.responderId) : incidents
+  const list = incidents
   const open = list.filter((i) => !['resolved', 'rejected'].includes(i.status))
   const waiting = list.filter((i) => ['pending', 'review'].includes(i.status))
   return <>
-    <PageHeader title={ctx.role === 'responder' ? 'My overview' : 'Overview'} subtitle="Records entered in this workspace" actions={<Button variant="secondary" onClick={() => ctx.go('monitor')}>Open map</Button>} />
+    <PageHeader title="Overview" subtitle="Records entered in this workspace" actions={<Button variant="secondary" onClick={() => ctx.go('monitor')}>Open map</Button>} />
     <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <Kpi label="Open incidents" value={open.length} icon={Inbox} color="#3b6ef0" />
       <Kpi label="Awaiting verification" value={waiting.length} icon={ListChecks} color="#8b5cf6" />
@@ -30,7 +38,7 @@ export function Overview() {
       </Panel>
     </div>
     <div className="mt-5 grid gap-5 md:grid-cols-2">
-      <Panel title="Advisories & monitoring"><p className="pt-2 text-sm text-ink-2">No advisory or river-monitoring service is connected.</p></Panel>
+      {ctx.role === 'official' && <BroadcastForm />}
       <Panel title="Workspace activity"><p className="pt-2 text-sm text-ink-2">{audit.length} recorded actions. Server health and account statistics are unavailable until a service is connected.</p></Panel>
     </div>
     <IncidentDrawer incident={list.find((i) => i.id === selected)} onClose={() => setSelected(null)} />

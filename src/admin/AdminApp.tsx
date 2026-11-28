@@ -4,7 +4,6 @@ import {
   ChartColumn,
   ChevronsUpDown,
   ClipboardCheck,
-  Command,
   House,
   Kanban,
   LayoutGrid,
@@ -24,11 +23,12 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Avatar, CategoryIcon, IconButton, LogoMark, RolePill, StatusPill, Toaster } from '../components/ui'
-import { ROLES, type Role } from '../data/meta'
+import { ROLES } from '../data/meta'
 import { cx, timeAgo } from '../lib/format'
-import { useStore } from '../store'
+import { StoreProvider, useStore } from '../store'
 import { ThemeToggle } from '../App'
-import { ACCESS, AdminCtx, Menu, Restricted, WORKSPACE_USERS, useAdmin, type AdminCtxValue, type AdminSettings, type Page } from './common'
+import { ACCESS, AdminCtx, Menu, Restricted, useAdmin, type AdminCtxValue, type AdminSettings, type Page } from './common'
+import type { StaffSession } from '../lib/staffAuth'
 import { StaffLogin } from './Login'
 import { Overview } from './Overview'
 import { Incidents } from './Incidents'
@@ -41,15 +41,14 @@ import { ActivityPage } from './Activity'
 import { UsersPage } from './Users'
 import { SettingsPage } from './Settings'
 
-type StaffRole = Exclude<Role, 'resident'>
 
-const NAV: { page: Page; label: string; icon: LucideIcon; group: string; responderLabel?: string }[] = [
-  { page: 'overview', label: 'Overview', icon: LayoutGrid, group: 'Operations', responderLabel: 'Today' },
+const NAV: { page: Page; label: string; icon: LucideIcon; group: string }[] = [
+  { page: 'overview', label: 'Overview', icon: LayoutGrid, group: 'Operations' },
   { page: 'incidents', label: 'Incidents', icon: ListChecks, group: 'Operations' },
   { page: 'verify', label: 'Verification', icon: ClipboardCheck, group: 'Operations' },
   { page: 'assign', label: 'Priority & Dispatch', icon: Send, group: 'Operations' },
-  { page: 'tasks', label: 'Responder Tasks', icon: Kanban, group: 'Operations', responderLabel: 'My Tasks' },
-  { page: 'monitor', label: 'Monitoring Map', icon: MapIcon, group: 'Insights', responderLabel: 'Task Map' },
+  { page: 'tasks', label: 'Responder Tasks', icon: Kanban, group: 'Operations' },
+  { page: 'monitor', label: 'Monitoring Map', icon: MapIcon, group: 'Insights' },
   { page: 'analytics', label: 'Analytics', icon: ChartColumn, group: 'Insights' },
   { page: 'activity', label: 'Activity & Audit', icon: Activity, group: 'Insights' },
   { page: 'users', label: 'Users & Roles', icon: Users, group: 'Administration' },
@@ -57,22 +56,38 @@ const NAV: { page: Page; label: string; icon: LucideIcon; group: string; respond
 ]
 
 export function AdminApp({ onExit, onResident }: { onExit: () => void; onResident: () => void }) {
-  const [role, setRoleState] = useState<StaffRole | null>(null)
+  const [session, setSession] = useState<StaffSession | null>(null)
+  const role = session?.role
   const [page, setPage] = useState<Page>('overview')
   const [param, setParam] = useState<string | undefined>()
   const [settings, setSettingsState] = useState<AdminSettings>({ aiEnabled: false, aiThreshold: 70, dupRadius: 150, autoEscalate: false })
-  const { toast, addAudit } = useStore()
+  useEffect(() => {
+    if (!session) return
+    let active = true
+    const lock = () => { if (active) setSession(null) }
+    const verify = async () => {
+      try {
+        const { staffProfile } = await import('../lib/staffAuth')
+        const profile = await staffProfile(session.token)
+        if (profile.id !== session.id || profile.role !== session.role) lock()
+      } catch { lock() }
+    }
+    const expiry = window.setTimeout(lock, Math.max(0, session.expiresAt - Date.now()))
+    const interval = window.setInterval(verify, 60_000)
+    window.addEventListener('focus', verify)
+    return () => {
+      active = false
+      clearTimeout(expiry)
+      clearInterval(interval)
+      window.removeEventListener('focus', verify)
+    }
+  }, [session])
 
   const ctx = useMemo<AdminCtxValue | null>(
     () =>
-      role && {
+      session && role ? {
+        token: session.token,
         role,
-        setRole: (r) => {
-          setRoleState(r)
-          setPage('overview')
-          setParam(undefined)
-          toast(`Workspace view: ${ROLES[r].label}`)
-        },
         page,
         param,
         go: (p, prm) => {
@@ -80,33 +95,37 @@ export function AdminApp({ onExit, onResident }: { onExit: () => void; onResiden
           setParam(prm)
           document.getElementById('admin-main')?.scrollTo({ top: 0 })
         },
-        user: WORKSPACE_USERS[role],
+        user: { name: session.name, first: session.name.split(' ')[0], title: ROLES[role].label, email: session.email, responderId: role === 'official' ? session.id : undefined },
         settings,
         setSettings: (s) => setSettingsState((x) => ({ ...x, ...s })),
-      },
-    [role, page, param, settings, toast],
+      } : null,
+    [session, role, page, param, settings],
   )
 
-  if (!role || !ctx)
-    return (
-      <StaffLogin
-        onExit={onExit}
-        onDone={(r) => {
-          setRoleState(r)
-        }}
-      />
-    )
+  if (!ctx || !session) {
+    function handleStaffSignIn(verifiedSession: StaffSession) {
+      setParam(undefined)
+      setPage('overview')
+      setSession(verifiedSession)
+    }
 
-  return (
+    return <StaffLogin onExit={onExit} onAuthenticated={handleStaffSignIn} />
+  }
+
+  const workspace = (
     <AdminCtx.Provider value={ctx}>
-      <Shell onExit={onExit} onResident={onResident} onSignOut={() => setRoleState(null)} />
+      <Shell onExit={onExit} onResident={onResident} onSignOut={() => {
+        setSession(null)
+        void import('../lib/staffAuth').then(auth => auth.signOutStaff(session.token)).catch(() => {})
+      }} />
     </AdminCtx.Provider>
   )
+  return role === 'official' || role === 'admin' ? <StoreProvider key={session.id} officialToken={session.token}>{workspace}</StoreProvider> : workspace
 }
 
 function Shell({ onExit, onResident, onSignOut }: { onExit: () => void; onResident: () => void; onSignOut: () => void }) {
   const ctx = useAdmin()
-  const { incidents, staffNotifs } = useStore()
+  const { incidents, staffNotifs, officialFeedState, refreshOfficialFeed } = useStore()
   const [palette, setPalette] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
   const allowed = ACCESS[ctx.role]
@@ -125,8 +144,8 @@ function Shell({ onExit, onResident, onSignOut }: { onExit: () => void; onReside
   const counts: Partial<Record<Page, number>> = {
     incidents: incidents.filter((i) => !['resolved', 'rejected'].includes(i.status)).length,
     verify: incidents.filter((i) => i.status === 'pending' || i.status === 'review').length,
-    assign: incidents.filter((i) => i.status === 'verified').length,
-    tasks: incidents.filter((i) => (i.status === 'assigned' || i.status === 'progress') && (ctx.role !== 'responder' || i.assignee === ctx.user.responderId)).length,
+    assign: incidents.filter((i) => i.status === 'verified' || (i.status === 'assigned' && i.acceptanceStatus === 'declined')).length,
+    tasks: incidents.filter((i) => (i.status === 'assigned' || i.status === 'progress') && (!ctx.user.responderId || i.assignee === ctx.user.responderId)).length,
   }
 
   const navItems = NAV.filter((n) => allowed.includes(n.page))
@@ -145,12 +164,12 @@ function Shell({ onExit, onResident, onSignOut }: { onExit: () => void; onReside
       <nav className="no-scrollbar flex-1 overflow-y-auto px-3">
         {groups.map((g) => (
           <div key={g} className="mb-4">
-            <div className={cx('mb-1 px-2.5 text-[11px] font-semibold tracking-wider text-ink-3 uppercase', collapsedCapable && 'max-xl:hidden')}>{ctx.role === 'responder' && g === 'Administration' ? 'Account' : g}</div>
+            <div className={cx('mb-1 px-2.5 text-[11px] font-semibold tracking-wider text-ink-3 uppercase', collapsedCapable && 'max-xl:hidden')}>{ctx.role === 'official' && g === 'Administration' ? 'Account' : g}</div>
             {navItems
               .filter((n) => n.group === g)
               .map((n) => {
                 const on = ctx.page === n.page
-                const label = ctx.role === 'responder' && n.responderLabel ? n.responderLabel : n.label
+                const label = n.label
                 return (
                   <button
                     key={n.page}
@@ -172,7 +191,7 @@ function Shell({ onExit, onResident, onSignOut }: { onExit: () => void; onReside
           </div>
         ))}
       </nav>
-      <div className="px-4 pb-3 text-xs text-ink-3">Local workspace · not signed in</div>
+      <div className="px-4 pb-3 text-xs text-ink-3">Local report workspace</div>
       <div className={cx('border-t border-line p-3', collapsedCapable && 'max-xl:px-2')}>
         <Menu
           align="left"
@@ -215,29 +234,27 @@ function Shell({ onExit, onResident, onSignOut }: { onExit: () => void; onReside
           <IconButton icon={MenuIcon} label="Open navigation" className="md:hidden" onClick={() => setMobileNav(true)} />
           <div className="min-w-0 flex-1">
             <div className="truncate text-[13px] text-ink-3">
-              {current?.group} <span className="mx-1 text-ink-3/60">/</span> <span className="font-semibold text-ink">{ctx.role === 'responder' && current?.responderLabel ? current.responderLabel : current?.label}</span>
+              {current?.group} <span className="mx-1 text-ink-3/60">/</span> <span className="font-semibold text-ink">{current?.label}</span>
             </div>
           </div>
-          <button onClick={() => setPalette(true)} className="hidden h-9 w-[280px] items-center gap-2 rounded-[11px] bg-surface-3/70 px-3 text-[13px] text-ink-3 transition hover:bg-surface-3 lg:flex">
+          <button aria-keyshortcuts="Control+k Meta+k" onClick={() => setPalette(true)} className="hidden h-9 w-[280px] items-center gap-2 rounded-[11px] bg-surface-3/70 px-3 text-[13px] text-ink-3 transition hover:bg-surface-3 lg:flex">
             <Search size={15} /> Search incidents, pages…
             <kbd className="ml-auto flex items-center gap-0.5 rounded-md bg-surface px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-line">
-              <Command size={11} />K
+              Ctrl + K
             </kbd>
           </button>
           <IconButton icon={Search} label="Search" className="lg:hidden" onClick={() => setPalette(true)} />
-          <Menu
-            trigger={(open) => (
-              <button onClick={open} className="hidden h-9 items-center gap-2 rounded-[11px] px-2.5 text-[13px] font-semibold ring-1 ring-line-2 transition hover:bg-surface-2 sm:flex" title="Switch workspace view">
-                <span className="h-2 w-2 rounded-full" style={{ background: ROLES[ctx.role].color }} />
-                {ROLES[ctx.role].label.split(' /')[0]}
-                <ChevronsUpDown size={14} className="text-ink-3" />
-              </button>
-            )}
-            items={(['official', 'responder', 'admin'] as StaffRole[]).map((r) => ({ label: `View as ${ROLES[r].label}`, onClick: () => ctx.setRole(r) }))}
-          />
+          {(ctx.role === 'admin' || ctx.role === 'official') && (
+            <button type="button" disabled={officialFeedState === 'loading'} onClick={refreshOfficialFeed}
+              className="rounded-lg bg-surface px-3 py-2 text-sm font-semibold text-accent ring-1 ring-line disabled:opacity-60">
+              {officialFeedState === 'loading' ? 'Refreshing…' : 'Refresh reports'}
+            </button>
+          )}
+          <RolePill role={ctx.role} />
           <ThemeToggle className="h-9 w-9 shadow-none" />
           <NotificationsPopover unread={unread} />
         </header>
+        {(ctx.role === 'admin' || ctx.role === 'official') && officialFeedState === 'error' && <p role="alert" className="px-5 py-2 text-sm text-danger">Could not load resident reports. Use Refresh reports to retry.</p>}
         <main id="admin-main" className={cx('min-h-0 flex-1', isMap ? 'relative overflow-hidden' : 'overflow-y-auto')}>
           <div key={ctx.page + (ctx.param ?? '') + ctx.role} className={cx('animate-fade-in', isMap ? 'h-full' : 'mx-auto max-w-[1440px] px-4 py-6 md:px-8 md:py-8')}>
             {!allowed.includes(ctx.page) ? <Restricted onBack={() => ctx.go('overview')} /> : <PageView page={ctx.page} />}
@@ -302,7 +319,18 @@ function NotificationsPopover({ unread }: { unread: number }) {
                     onClick={() => {
                       markStaffRead(n.id)
                       setOpen(false)
-                      if (inc) ctx.go(ctx.role === 'responder' ? 'tasks' : inc.status === 'pending' || inc.status === 'review' ? 'verify' : 'incidents', inc.id)
+                      if (inc) {
+                        const nextPage = ctx.role === 'admin'
+                          ? 'incidents'
+                          : inc.status === 'pending' || inc.status === 'review'
+                            ? 'verify'
+                            : inc.status === 'verified'
+                              ? 'assign'
+                              : ctx.user.responderId && inc.assignee === ctx.user.responderId && (inc.status === 'assigned' || inc.status === 'progress')
+                                ? 'tasks'
+                                : 'incidents'
+                        ctx.go(nextPage, inc.id)
+                      }
                     }}
                     className="flex w-full gap-3 rounded-[12px] p-2.5 text-left transition hover:bg-surface-2"
                   >
@@ -344,9 +372,13 @@ function Palette({ onClose, navItems }: { onClose: () => void; navItems: typeof 
   const incs = incidents.filter((i) => `${i.code} ${i.title} ${i.address} ${i.purok}`.toLowerCase().includes(q.toLowerCase())).slice(0, 6)
   const openInc = (id: string, status: string) => {
     onClose()
-    if (ctx.role === 'responder') ctx.go('tasks', id)
-    else if (ctx.role === 'admin') ctx.go('incidents', id)
-    else ctx.go(status === 'pending' || status === 'review' ? 'verify' : status === 'verified' ? 'assign' : 'incidents', id)
+    if (ctx.role === 'admin') ctx.go('incidents', id)
+    else if (status === 'pending' || status === 'review') ctx.go('verify', id)
+    else if (status === 'verified') ctx.go('assign', id)
+    else {
+      const incident = incidents.find(item => item.id === id)
+      ctx.go(incident && ctx.user.responderId && incident.assignee === ctx.user.responderId && (status === 'assigned' || status === 'progress') ? 'tasks' : 'incidents', id)
+    }
   }
   return (
     <div className="fixed inset-0 z-[100] flex items-start justify-center p-4 pt-[12vh]">

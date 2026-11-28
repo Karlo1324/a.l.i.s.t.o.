@@ -11,7 +11,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
-  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Inter', system-ui, 'Segoe UI', sans-serif;
+  --font-sans: 'Inter', system-ui, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
 
   --color-bg: var(--bg);
@@ -184,7 +184,7 @@
     -moz-osx-font-smoothing: grayscale;
     font-feature-settings: 'cv11', 'ss01';
     letter-spacing: -0.006em;
-    transition: background-color 0.3s ease;
+
   }
   button {
     cursor: pointer;
@@ -211,5 +211,30 @@
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+::view-transition-old(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-new(root) {
+  mix-blend-mode: normal;
+  will-change: clip-path;
+  animation: theme-reveal 520ms cubic-bezier(.22,.68,.18,1) both;
+}
+@keyframes theme-reveal {
+  from { clip-path: circle(0 at var(--theme-origin)); }
+  to { clip-path: circle(var(--theme-radius) at var(--theme-origin)); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .report-confirmation-check {
+    stroke-dasharray: 1;
+    animation: draw-report-check 380ms ease-out 100ms both;
+  }
+  @keyframes draw-report-check {
+    from { stroke-dashoffset: 1; }
+    to { stroke-dashoffset: 0; }
   }
 }

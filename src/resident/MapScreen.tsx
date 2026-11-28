@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ChevronRight, Flame, Layers, List, Navigation, Search, Tent, ThumbsUp, WavesHorizontal, X } from 'lucide-react'
-import { Button, CategoryIcon, Sheet, StatusPill, Switch } from '../components/ui'
+import { Button, CategoryIcon, Sheet, StatusPill } from '../components/ui'
+import { Switch } from './ResidentControls'
 import { MapView } from '../components/Map'
 import { CATEGORIES, CATEGORY_KEYS, type Category } from '../data/meta'
 import { cx, distanceLabel, timeAgo } from '../lib/format'

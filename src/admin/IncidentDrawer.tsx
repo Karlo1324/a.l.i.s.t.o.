@@ -3,16 +3,15 @@ import { ArrowRight, MapPin, Phone, RotateCcw, Sparkles, Users } from 'lucide-re
 import { MapView } from '../components/Map'
 import { AIBadge, Avatar, Button, CategoryTag, PriorityPill, StatusPill } from '../components/ui'
 import { CATEGORIES, STATUSES } from '../data/meta'
-import { RESPONDERS, type Incident } from '../data/records'
+import type { Incident } from '../data/records'
 import { fmtDateTime, timeAgo } from '../lib/format'
 import { useStore } from '../store'
 import { Drawer, useAdmin } from './common'
 
 export function IncidentDrawer({ incident, onClose }: { incident: Incident | null | undefined; onClose: () => void }) {
   const ctx = useAdmin()
-  const { updateIncident, toast } = useStore()
+  const { toast, refreshOfficialFeed } = useStore()
   const inc = incident
-  const responder = RESPONDERS.find((r) => r.id === inc?.assignee)
 
   return (
     <Drawer
@@ -161,7 +160,7 @@ export function IncidentDrawer({ incident, onClose }: { incident: Incident | nul
             </div>
 
             {/* Assigned responder */}
-            {responder && (
+            {inc.assigneeName && (
               <div className="flex min-w-0 items-center gap-3 rounded-[16px] bg-surface-2 p-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
                   <Users size={16} />
@@ -169,11 +168,11 @@ export function IncidentDrawer({ incident, onClose }: { incident: Incident | nul
 
                 <div className="min-w-0 flex-1">
                   <div className="break-words text-[13px] leading-5 font-semibold">
-                    {responder.name}
+                    {inc.assigneeName}
                   </div>
 
                   <div className="mt-0.5 break-words text-[12px] leading-5 text-ink-3">
-                    {responder.team} · {inc.progress ?? 0}% complete
+                    {inc.assigneePhone || 'Responder (Official)'} · {inc.progress ?? 0}% complete · {inc.acceptanceStatus ?? 'pending'} response
                   </div>
                 </div>
               </div>
@@ -296,14 +295,16 @@ export function IncidentDrawer({ incident, onClose }: { incident: Incident | nul
                 variant="secondary"
                 className="flex-1"
                 icon={RotateCcw}
-                onClick={() => (
-                  updateIncident(
-                    inc.id,
-                    { status: 'review' },
-                    { note: 'Reopened for review' }
-                  ),
-                  toast('Incident reopened')
-                )}
+                onClick={async () => {
+                  try {
+                    const { updateStaffReport } = await import('../lib/staffAuth')
+                    await updateStaffReport(ctx.token, { reportId: inc.id, action: 'reopen' })
+                    refreshOfficialFeed()
+                    toast('Incident reopened', 'success')
+                  } catch (error) {
+                    toast(error instanceof Error ? error.message : 'Could not reopen this report.', 'danger')
+                  }
+                }}
               >
                 Reopen
               </Button>
@@ -311,7 +312,7 @@ export function IncidentDrawer({ incident, onClose }: { incident: Incident | nul
 
           {ctx.role === 'admin' && (
             <div className="min-w-0 flex-1 text-[12px] leading-5 text-ink-3">
-              Administrators have read-only access to incident workflows.
+              Use Verification to accept or reject reports, or Priority & Dispatch to assign responders.
             </div>
           )}
         </div>

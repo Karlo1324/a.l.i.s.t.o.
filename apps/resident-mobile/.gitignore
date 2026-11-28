@@ -1,4 +1,4 @@
 .expo/
-android/
+/android/
 *.apk
 *.aab

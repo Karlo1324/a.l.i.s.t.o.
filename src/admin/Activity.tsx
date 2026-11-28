@@ -21,7 +21,7 @@ const TYPES: { v: AuditEntry['type'] | 'all'; l: string }[] = [
 export function ActivityPage() {
   const ctx = useAdmin()
   const { staffNotifs, markStaffRead, incidents, audit, toast, getIncident } = useStore()
-  const canAudit = ctx.role !== 'responder'
+  const canAudit = ctx.role === 'admin' || ctx.role === 'official'
   const [tab, setTab] = useState<Tab>(ctx.param === 'audit' && canAudit ? 'audit' : 'notifications')
   const [unreadOnly, setUnreadOnly] = useState(false)
   const [type, setType] = useState<AuditEntry['type'] | 'all'>('all')
@@ -30,11 +30,10 @@ export function ActivityPage() {
   const history = useMemo(
     () =>
       incidents
-        .filter((i) => ctx.role !== 'responder' || i.assignee === ctx.user.responderId)
         .flatMap((i) => i.timeline.map((t) => ({ ...t, inc: i })))
         .sort((a, b) => b.at.getTime() - a.at.getTime())
         .slice(0, 40),
-    [incidents, ctx.role, ctx.user.responderId],
+    [incidents],
   )
   const groupedHistory = useMemo(() => {
     const g: Record<string, typeof history> = {}
@@ -99,7 +98,19 @@ export function ActivityPage() {
                       </Button>
                     )}
                     {inc && (
-                      <Button size="sm" variant="secondary" onClick={() => (markStaffRead(n.id), ctx.go(ctx.role === 'responder' ? 'tasks' : inc.status === 'pending' || inc.status === 'review' ? (ctx.role === 'official' ? 'verify' : 'incidents') : 'incidents', inc.id))}>
+                      <Button size="sm" variant="secondary" onClick={() => {
+                        markStaffRead(n.id)
+                        const nextPage = ctx.role === 'admin'
+                          ? 'incidents'
+                          : inc.status === 'pending' || inc.status === 'review'
+                            ? 'verify'
+                            : inc.status === 'verified'
+                              ? 'assign'
+                              : ctx.user.responderId && inc.assignee === ctx.user.responderId && (inc.status === 'assigned' || inc.status === 'progress')
+                                ? 'tasks'
+                                : 'incidents'
+                        ctx.go(nextPage, inc.id)
+                      }}>
                         Open
                       </Button>
                     )}

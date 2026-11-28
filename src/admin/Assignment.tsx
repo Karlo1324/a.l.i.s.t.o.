@@ -1,13 +1,11 @@
-import { useMemo, useState } from 'react'
-import { BadgeCheck, CircleCheck, Gauge, MapPin, Send, Sparkles, Star, Truck, Users } from 'lucide-react'
-import { MapView } from '../components/Map'
+import { useEffect, useState } from 'react'
+import { BadgeCheck, CircleCheck, Gauge, MapPin, Send, Sparkles, Users } from 'lucide-react'
 import { AIBadge, Avatar, Button, CategoryIcon, EmptyState, Field, PriorityPill, Segmented, StatusPill, Switch, TextArea } from '../components/ui'
-import { CATEGORIES, PRIORITIES, PRIORITY_KEYS, type Category, type Priority } from '../data/meta'
-import { RESPONDERS } from '../data/records'
+import { PRIORITIES, PRIORITY_KEYS, type Category, type Priority } from '../data/meta'
 import { cx, timeAgo } from '../lib/format'
+import type { StaffResponder } from '../lib/staffAuth'
 import { useStore } from '../store'
 import { PageHeader, Panel, useAdmin } from './common'
-import { distM } from './Verification'
 
 const FACTORS = [
   { k: 'life', l: 'Hazard to life', opts: ['None', 'Possible', 'Imminent'] },
@@ -29,8 +27,8 @@ const CHECKLISTS: Record<Category, string[]> = {
 
 export function Assignment() {
   const ctx = useAdmin()
-  const { incidents, updateIncident, toast } = useStore()
-  const queue = incidents.filter((i) => i.status === 'verified')
+  const { incidents, toast, refreshOfficialFeed } = useStore()
+  const queue = incidents.filter((i) => i.status === 'verified' || (i.status === 'assigned' && i.acceptanceStatus === 'declined'))
   const [selId, setSelId] = useState<string | null>(ctx.param && incidents.find((i) => i.id === ctx.param) ? ctx.param : queue[0]?.id ?? null)
   const inc = incidents.find((i) => i.id === selId)
 
@@ -41,7 +39,26 @@ export function Assignment() {
   const [overrideNote, setOverrideNote] = useState('')
   const [responder, setResponder] = useState<string | null>(null)
   const [notes, setNotes] = useState('')
-  const [sms, setSms] = useState(true)
+  const [responders, setResponders] = useState<StaffResponder[]>([])
+  const [responderState, setResponderState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [responderError, setResponderError] = useState('')
+  const [dispatching, setDispatching] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    import('../lib/staffAuth').then(({ listStaffResponders }) => listStaffResponders(ctx.token)).then(rows => {
+      if (!active) return
+      setResponders(rows)
+      setResponderState('ready')
+      if (rows.length) setResponder(current => current && rows.some(row => row.id === current) ? current : rows[0].id)
+    }).catch(error => {
+      if (active) {
+        setResponderError(error instanceof Error ? error.message : 'Could not load eligible responders.')
+        setResponderState('error')
+      }
+    })
+    return () => { active = false }
+  }, [ctx.token])
 
   const pick = (id: string) => {
     setSelId(id)
@@ -62,33 +79,21 @@ export function Assignment() {
   const recommended: Priority = score >= 70 ? 'critical' : score >= 45 ? 'high' : score >= 25 ? 'medium' : 'low'
   const final = override ?? recommended
 
-  const ranked = useMemo(() => {
-    if (!inc) return []
-    return RESPONDERS.filter((r) => r.status !== 'off-duty')
-      .map((r) => {
-        const d = distM(r, inc)
-        const load = incidents.filter((i) => i.assignee === r.id && (i.status === 'assigned' || i.status === 'progress')).length
-        const skill = r.skills.includes(inc.category)
-        const match = Math.round(Math.min(99, (skill ? 50 : 10) + (r.status === 'available' ? 25 : 5) + Math.max(0, 20 - d / 60) - load * 6 + r.rating))
-        return { r, d, load, skill, match, eta: Math.max(3, Math.round(d / 180)) }
-      })
-      .sort((a, b) => b.match - a.match)
-  }, [inc, incidents])
-  const chosen = ranked.find((x) => x.r.id === responder)
+  const chosen = responders.find((item) => item.id === responder)
 
   return (
     <>
       <PageHeader title="Priority & Dispatch" subtitle="Assess verified incidents, confirm priority, and assign the best-matched responder." />
       <div className="grid gap-4 xl:grid-cols-[300px_1fr]">
-        <Panel title="Ready for dispatch" subtitle={`${queue.length} verified`} bodyClass="p-2" className="xl:self-start">
-          {queue.length === 0 && <EmptyState icon={CircleCheck} title="Nothing to dispatch" body="Verified incidents will appear here." action={<Button size="sm" onClick={() => ctx.go('verify')}>Verification queue</Button>} />}
+        <Panel title="Ready for dispatch" subtitle={`${queue.length} awaiting assignment`} bodyClass="p-2" className="xl:self-start">
+          {queue.length === 0 && <EmptyState icon={CircleCheck} title="Nothing to dispatch" body="Verified reports and declined assignments will appear here." action={<Button size="sm" onClick={() => ctx.go('verify')}>Verification queue</Button>} />}
           {queue.map((i) => (
             <button key={i.id} onClick={() => pick(i.id)} className={cx('flex w-full items-center gap-3 rounded-[14px] p-2.5 text-left transition', selId === i.id ? 'bg-accent-soft ring-1 ring-accent/30' : 'hover:bg-surface-2')}>
               <CategoryIcon category={i.category} size={38} />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[13px] font-semibold">{i.title}</div>
                 <div className="text-[11px] text-ink-3">
-                  {i.code} · verified {timeAgo(i.updatedAt)}
+                  {i.code} · {i.acceptanceStatus === 'declined' ? 'declined; reassign' : `verified ${timeAgo(i.updatedAt)}`}
                 </div>
               </div>
               {i.danger && <span className="h-2 w-2 rounded-full bg-danger" />}
@@ -167,56 +172,24 @@ export function Assignment() {
                 </div>
               </Panel>
 
-              <Panel title="Responder location" subtitle={chosen ? `${chosen.r.name} · ${chosen.d} m` : 'Select a responder to preview route'} icon={Truck} bodyClass="px-2 pb-2">
-                <div className="relative h-[360px] overflow-hidden rounded-[16px] 2xl:h-full 2xl:min-h-[420px]">
-                  <MapView
-                    className="absolute inset-0"
-                    markers={[{ id: inc.id, x: inc.x, y: inc.y, category: inc.category, pulse: true }]}
-                    responders={RESPONDERS.filter((r) => r.status !== 'off-duty')}
-                    highlightResponder={responder}
-                    onSelectResponder={setResponder}
-                    routeTo={chosen ? { from: chosen.r, to: inc } : null}
-                    focus={chosen ? { x: (chosen.r.x + inc.x) / 2, y: (chosen.r.y + inc.y) / 2, zoom: 1.5, key: chosen.r.id } : { x: inc.x, y: inc.y, zoom: 1.3 }}
-                    initialZoom={1.3}
-                    landmarks
-                  />
-                </div>
+              <Panel title="Responder directory" subtitle="Active Responder (Official) accounts in this barangay" icon={Users} bodyClass="px-3 pb-3">
+                {responderState === 'loading' ? <p className="p-3 text-[13px] text-ink-3">Loading eligible responders…</p> :
+                  responderState === 'error' ? <div className="p-3 text-[13px] text-danger">Could not load responders: {responderError}</div> :
+                    responders.length === 0 ? <EmptyState icon={Users} title="No responders assigned" body="Add an active Responder (Official) account and assign it to this barangay before dispatching." /> :
+                      <div className="space-y-2">
+                        {responders.map((item) => (
+                          <button key={item.id} onClick={() => setResponder(item.id)} className={cx('flex w-full items-center gap-3 rounded-[14px] p-3 text-left ring-1 transition', responder === item.id ? 'bg-accent-soft ring-2 ring-accent' : 'ring-line hover:bg-surface-2')}>
+                            <Avatar name={item.full_name} size={38} />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-[14px] font-semibold">{item.full_name}</div>
+                              <div className="truncate text-[12px] text-ink-3">{item.phone || 'No phone on profile'}</div>
+                            </div>
+                            <span className="shrink-0 rounded-full bg-surface-2 px-2 py-1 text-[11px] font-semibold text-ink-2">{item.active_tasks} active</span>
+                          </button>
+                        ))}
+                      </div>}
               </Panel>
             </div>
-
-            <Panel title="Recommended responders" subtitle="Registered responders" icon={Users} bodyClass="px-3 pb-3">
-              <div className="grid gap-2 lg:grid-cols-2">
-                {ranked.map(({ r, d, load, skill, match, eta }, idx) => (
-                  <button key={r.id} onClick={() => setResponder(r.id)} className={cx('flex items-center gap-3 rounded-[16px] p-3 text-left ring-1 transition', responder === r.id ? 'bg-accent-soft ring-2 ring-accent' : 'ring-line hover:bg-surface-2')}>
-                    <div className="relative">
-                      <Avatar name={r.name} size={42} />
-                      <span className={cx('absolute -right-0.5 -bottom-0.5 h-3.5 w-3.5 rounded-full border-2 border-surface', r.status === 'available' ? 'bg-[#22a06b]' : 'bg-[#3b6ef0]')} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="truncate text-[14px] font-semibold">{r.name}</span>
-                        {idx === 0 && <span className="rounded-full bg-[#22a06b]/12 px-1.5 py-px text-[10px] font-bold text-[#1d8a5c] dark:text-[#4ad396]">BEST MATCH</span>}
-                      </div>
-                      <div className="truncate text-[12px] text-ink-3">
-                        {r.team} · {r.vehicle}
-                      </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-ink-2">
-                        <span>{d} m</span>
-                        <span>{load} active</span>
-                        <span className="flex items-center gap-0.5">
-                          <Star size={10} className="fill-[#f5b301] text-[#f5b301]" /> {r.rating}
-                        </span>
-                        {skill && <span className="font-semibold text-accent">✓ {CATEGORIES[inc.category].short} skilled</span>}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-[17px] font-bold tabular">{match}%</div>
-                      <div className="text-[10px] text-ink-3">match</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </Panel>
 
             <Panel title="Dispatch instructions">
               <div className="grid gap-4 lg:grid-cols-2">
@@ -241,26 +214,36 @@ export function Assignment() {
                 <Button
                   size="lg"
                   icon={Send}
-                  disabled={!responder || (!!override && overrideNote.trim().length < 4)}
-                  onClick={() => {
+                  disabled={!chosen || responderState !== 'ready' || dispatching || (!!override && overrideNote.trim().length < 4)}
+                  onClick={async () => {
                     if (!chosen) return
-                    updateIncident(
-                      inc.id,
-                      { status: 'assigned', priority: final, assignee: chosen.r.id, progress: 0, checklist: CHECKLISTS[inc.category].map((l) => ({ label: l, done: false })) },
-                      { note: `Assigned to ${chosen.r.name} · Priority ${PRIORITIES[final].label}${override ? ` (override: ${overrideNote})` : ''}`, by: ctx.user.name },
-                    )
-                    toast(`${chosen.r.name} assigned in local workspace`, 'success')
-                    const next = queue.find((q) => q.id !== inc.id)
-                    if (next) pick(next.id)
-                    else ctx.go('tasks', inc.id)
+                    setDispatching(true)
+                    try {
+                      const { updateStaffReport } = await import('../lib/staffAuth')
+                      await updateStaffReport(ctx.token, {
+                        reportId: inc.id,
+                        action: 'assign',
+                        assigneeId: chosen.id,
+                        priority: final,
+                        dispatchNotes: `${notes.trim()}${override ? `${notes.trim() ? '\n\n' : ''}Priority override: ${overrideNote.trim()}` : ''}`,
+                        checklist: CHECKLISTS[inc.category].map((label) => ({ label, done: false })),
+                      })
+                      refreshOfficialFeed()
+                      toast(`${chosen.full_name} assigned to ${inc.code}`, 'success')
+                      ctx.go('tasks', inc.id)
+                    } catch (error) {
+                      toast(error instanceof Error ? error.message : 'Could not dispatch this report.', 'danger')
+                    } finally {
+                      setDispatching(false)
+                    }
                   }}
                 >
-                  Dispatch {chosen ? chosen.r.name.split(' ')[0] : 'responder'}
+                  {dispatching ? 'Dispatching…' : `Dispatch ${chosen ? chosen.full_name.split(' ')[0] : 'responder'}`}
                 </Button>
               </div>
             </Panel>
             <div className="flex items-center gap-2 px-1 text-[12px] text-ink-3">
-              <Sparkles size={13} /> Responder ranking is based on the available records. <BadgeCheck size={13} /> Final assignment is made by the duty official.
+              <Sparkles size={13} /> Dispatch is limited to active staff assigned to this barangay. <BadgeCheck size={13} /> The responder must explicitly accept or decline.
             </div>
           </div>
         )}

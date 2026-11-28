@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ClipboardList, House, Map as MapIcon, Plus, UserRound } from 'lucide-react'
 import { Toaster } from '../components/ui'
-import { LOCAL_RESIDENT } from '../data/records'
 import { cx } from '../lib/format'
 import { useStore } from '../store'
 import { Forgot, Login, Register } from './Auth'
@@ -19,12 +18,15 @@ import type { Category } from '../data/meta'
 export type ResidentJump = 'onboarding' | 'login' | 'register' | 'forgot' | 'home' | 'report' | 'map' | 'reports' | 'reportDetail' | 'notifications' | 'profile'
 
 export function ResidentApp({ framed, jump }: { framed: boolean; jump?: { to: ResidentJump; n: number } }) {
-  const { incidents } = useStore()
+  const { resident, signedIn, incidents, sessionCheck, retrySessionCheck } = useStore()
   const [stage, setStage] = useState<Stage>('onboarding')
   const [tab, setTabState] = useState<Tab>('home')
   const [stack, setStack] = useState<Route[]>([])
   const [sheet, setSheet] = useState<'hotlines' | 'gobag' | null>(null)
-  const [onbLight, setOnbLight] = useState(true)
+
+  useEffect(() => {
+    if (signedIn) setStage(current => current === 'onboarding' || current === 'login' ? 'app' : current)
+  }, [signedIn])
 
   const nav: Nav = useMemo(
     () => ({
@@ -33,7 +35,6 @@ export function ResidentApp({ framed, jump }: { framed: boolean; jump?: { to: Re
         setStage(s)
         setStack([])
         if (s === 'app') setTabState('home')
-        if (s === 'onboarding') setOnbLight(true)
       },
       tab,
       setTab: (t) => {
@@ -61,19 +62,18 @@ export function ResidentApp({ framed, jump }: { framed: boolean; jump?: { to: Re
     else if (t === 'notifications') setStack([{ name: 'notifications' }])
     else if (t === 'reportDetail') {
       setTabState('reports')
-      const id = incidents.find((i) => i.reporter.id === LOCAL_RESIDENT.id && i.status === 'progress')?.id
+      const id = incidents.find((i) => i.reporter.id === resident.id && i.status === 'progress')?.id
       setStack(id ? [{ name: 'reportDetail', id }] : [])
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jump?.n])
 
   const top = stack[stack.length - 1]
-  const lightStatus = stage === 'onboarding' ? onbLight : stage === 'app' && top?.name === 'reportDetail'
 
   const renderRoute = (r: Route) => {
     switch (r.name) {
       case 'report':
-        return <ReportFlow initialCategory={r.category as Category | undefined} />
+        return <ReportFlow draft={incidents.find(i => i.id === r.draftId && i.reporter.id === 'local-workspace')} initialCategory={r.category as Category | undefined} />
       case 'reportDetail':
         return <ReportDetail id={r.id} />
       case 'notifications':
@@ -88,10 +88,10 @@ export function ResidentApp({ framed, jump }: { framed: boolean; jump?: { to: Re
   }
 
   return (
-    <PhoneFrame framed={framed} lightStatus={lightStatus}>
+    <PhoneFrame framed={framed}>
       <NavCtx.Provider value={nav}>
-        {stage === 'onboarding' && <Onboarding onLightStatus={setOnbLight} />}
-        {stage === 'login' && <Login />}
+        {stage === 'onboarding' && <Onboarding />}
+        {stage === 'login' && !signedIn && (sessionCheck === 'ready' ? <Login /> : <div role="status" className="p-6">{sessionCheck === 'checking' ? 'Restoring your account…' : <button onClick={retrySessionCheck}>Retry session check</button>}</div>)}
         {stage === 'register' && <Register />}
         {stage === 'forgot' && <Forgot />}
         {stage === 'app' && (

@@ -7,14 +7,20 @@ export function locationErrorMessage(code: number) {
   return 'Your location is unavailable. Check device location services or select a point on the map.'
 }
 
-export function useDeviceLocation() {
+export function useDeviceLocation(follow = false) {
   const [location, setLocation] = useState<({ x: number; y: number; accuracy: number }) | null>(null)
   const [locating, setLocating] = useState(false)
   const [error, setError] = useState('')
   const request = useRef(0)
-  useEffect(() => () => { request.current++ }, [])
-  const cancel = useCallback(() => { request.current++; setLocating(false) }, [])
+  const watch = useRef<number | null>(null)
+  const stopWatch = useCallback(() => {
+    if (watch.current !== null) navigator.geolocation.clearWatch(watch.current)
+    watch.current = null
+  }, [])
+  useEffect(() => () => { request.current++; stopWatch() }, [stopWatch])
+  const cancel = useCallback(() => { request.current++; stopWatch(); setLocating(false) }, [stopWatch])
   const locate = useCallback(() => {
+    stopWatch()
     const id = ++request.current
     setError('')
     if (!window.isSecureContext || !navigator.geolocation) {
@@ -23,19 +29,20 @@ export function useDeviceLocation() {
       return
     }
     setLocating(true)
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
+    const onPosition = ({ coords }: GeolocationPosition) => {
         if (request.current !== id) return
+        setError('')
         setLocation({ ...fromLatLng(coords.latitude, coords.longitude), accuracy: coords.accuracy })
         setLocating(false)
-      },
-      (failure) => {
+      }
+    const onError = (failure: GeolocationPositionError) => {
         if (request.current !== id) return
         setError(locationErrorMessage(failure.code))
         setLocating(false)
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-    )
-  }, [])
+      }
+    const options = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    if (follow) watch.current = navigator.geolocation.watchPosition(onPosition, onError, options)
+    else navigator.geolocation.getCurrentPosition(onPosition, onError, options)
+  }, [follow, stopWatch])
   return { location, locating, error, locate, cancel }
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowRight,
   BadgeCheck,
@@ -27,6 +27,7 @@ import type { Incident } from '../data/records'
 import { cx, fmtDateTime, fmtTime, timeAgo } from '../lib/format'
 import { useStore } from '../store'
 import { PageHeader, Panel, Select, useAdmin } from './common'
+import { ResidentAreaAssignments } from './ResidentAreaAssignments'
 
 const REJECT_REASONS = ['Duplicate of an existing report', 'Insufficient evidence / unclear photos', 'Location outside barangay jurisdiction', 'Not an incident / out of scope', 'Already resolved on inspection', 'Other']
 
@@ -36,7 +37,7 @@ export function distM(a: { x: number; y: number }, b: { x: number; y: number }) 
 
 export function Verification() {
   const ctx = useAdmin()
-  const { incidents, updateIncident, toast, addAudit } = useStore()
+  const { incidents, updateIncident, toast, addAudit, officialFeedState, refreshOfficialFeed } = useStore()
   const queue = useMemo(
     () =>
       incidents
@@ -45,6 +46,9 @@ export function Verification() {
     [incidents],
   )
   const [selId, setSelId] = useState<string | null>(ctx.param && queue.find((q) => q.id === ctx.param) ? ctx.param : queue[0]?.id ?? null)
+  useEffect(() => {
+    if (!selId && queue.length) setSelId(queue.find(item => item.id === ctx.param)?.id ?? queue[0].id)
+  }, [selId, queue, ctx.param])
   const [q, setQ] = useState('')
   const inc = incidents.find((i) => i.id === selId)
   const [photo, setPhoto] = useState(0)
@@ -58,6 +62,22 @@ export function Verification() {
   const [compare, setCompare] = useState<Incident | null>(null)
   const [applyAI, setApplyAI] = useState<Category | null>(null)
   const [verified, setVerified] = useState<Incident | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const updateReport = async (reportId: string, action: 'start_review' | 'verify' | 'reject', rejectionReason?: string) => {
+    setSaving(true)
+    try {
+      const { updateStaffReport } = await import('../lib/staffAuth')
+      await updateStaffReport(ctx.token, { reportId, action, rejectionReason })
+      refreshOfficialFeed()
+      return true
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Could not update this report.', 'danger')
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const select = (id: string) => {
     setSelId(id)
@@ -93,9 +113,22 @@ export function Verification() {
   const aiLow = inc?.ai ? inc.ai.confidence * 100 < ctx.settings.aiThreshold : false
   const nextId = () => queue.find((x) => x.id !== selId)?.id ?? null
 
+  if (officialFeedState !== 'ready') {
+    return <>
+      <PageHeader title="Verification" />
+      <div className="mb-6"><ResidentAreaAssignments /></div>
+      <Panel><div className="py-4" role="status">
+        {officialFeedState === 'loading' ? 'Loading resident reports…' : <>
+          <p className="mb-3">Could not load resident reports. Check your connection and try again.</p>
+          <Button onClick={refreshOfficialFeed}>Retry</Button>
+        </>}
+      </div></Panel>
+    </>
+  }
   return (
     <>
-      <PageHeader title="Verification" subtitle="Review resident reports before they enter dispatch. No automatic classifications are generated." actions={<span className="rounded-full bg-surface px-3 py-1.5 text-[13px] font-semibold shadow-card ring-1 ring-line">{queue.length} in queue</span>} />
+      <PageHeader title="Verification" subtitle="Accept valid reports or reject them with a reason before dispatch." actions={<><Button variant="secondary" onClick={refreshOfficialFeed}>Refresh</Button><span className="rounded-full bg-surface px-3 py-1.5 text-[13px] font-semibold shadow-card ring-1 ring-line">{queue.length} in queue</span></>} />
+      <div className="mb-6"><ResidentAreaAssignments /></div>
       <div className="grid gap-4 xl:grid-cols-[300px_1fr]">
         {/* Queue */}
         <Panel bodyClass="p-2" className="xl:sticky xl:top-0 xl:max-h-[calc(100vh-140px)] xl:self-start">
@@ -103,7 +136,7 @@ export function Verification() {
             <SearchField value={q} onChange={setQ} placeholder="Filter queue" />
           </div>
           <div className="max-h-[300px] space-y-1 overflow-y-auto xl:max-h-[calc(100vh-220px)]">
-            {shown.length === 0 && <EmptyState icon={ClipboardCheck} title="Queue is clear" body="New reports will appear here." />}
+            {shown.length === 0 && <EmptyState icon={ClipboardCheck} title={queue.length ? "No matching reports" : "Queue is clear"} body={queue.length ? "Try a different search." : "New reports will appear here."} />}
             {shown.map((i) => (
               <button key={i.id} onClick={() => select(i.id)} className={cx('flex w-full gap-3 rounded-[14px] p-2.5 text-left transition', selId === i.id ? 'bg-accent-soft ring-1 ring-accent/30' : 'hover:bg-surface-2')}>
                 <div className="relative shrink-0">
@@ -168,8 +201,9 @@ export function Verification() {
                   </Button>
                   <Button
                     icon={BadgeCheck}
-                    onClick={() => {
-                      updateIncident(inc.id, { status: 'verified' }, { note: `Reviewed · ${doneChecks}/4 checks complete`, by: ctx.user.name })
+                    disabled={saving}
+                    onClick={async () => {
+                      if (!await updateReport(inc.id, 'verify')) return
                       toast(`${inc.code} verified`, 'success')
                       setVerified(inc)
                       const n = nextId()
@@ -177,7 +211,7 @@ export function Verification() {
                       else setSelId(null)
                     }}
                   >
-                    Verify
+                    Accept & verify
                   </Button>
                 </div>
               </div>
@@ -185,7 +219,9 @@ export function Verification() {
                 <div className="mt-4 flex flex-wrap items-center gap-3 rounded-[14px] bg-[#8b5cf6]/8 px-4 py-3 ring-1 ring-[#8b5cf6]/20">
                   <Info size={17} className="text-[#8b5cf6]" />
                   <span className="flex-1 text-[13px]">This report is pending. Start a review to update its workspace status.</span>
-                  <Button size="sm" variant="secondary" onClick={() => (updateIncident(inc.id, { status: 'review' }, { by: ctx.user.name }), toast('Review started'))}>
+                  <Button size="sm" variant="secondary" disabled={saving} onClick={async () => {
+                    if (await updateReport(inc.id, 'start_review')) toast('Review started', 'success')
+                  }}>
                     Start review
                   </Button>
                 </div>
@@ -350,13 +386,13 @@ export function Verification() {
                               variant="tinted"
                               className="flex-1"
                               icon={GitMerge}
-                              onClick={() => {
-                                updateIncident(o.id, { status: 'rejected', rejectReason: `Merged as duplicate of ${inc.code}.` }, { note: `Merged into ${inc.code}`, by: ctx.user.name })
-                                updateIncident(inc.id, { confirmations: inc.confirmations + o.confirmations + 1, photos: [...inc.photos, ...o.photos.filter((p) => !inc.photos.includes(p))].slice(0, 6) })
-                                toast(`${o.code} merged into ${inc.code}`, 'success')
+                              disabled={saving}
+                              onClick={async () => {
+                                const reason = `Duplicate of ${inc.code}.`
+                                if (await updateReport(o.id, 'reject', reason)) toast(`${o.code} marked as a duplicate of ${inc.code}`, 'success')
                               }}
                             >
-                              Merge
+                              Mark duplicate
                             </Button>
                           </div>
                         </div>
@@ -416,9 +452,11 @@ export function Verification() {
             </Button>
             <Button
               variant="danger"
-              onClick={() => {
+              disabled={saving}
+              onClick={async () => {
                 if (!inc) return
-                updateIncident(inc.id, { status: 'rejected', rejectReason: `${reason}${rejectNote ? ` — ${rejectNote}` : ''}` }, { note: reason, by: ctx.user.name })
+                const rejectionReason = `${reason}${rejectNote ? ` — ${rejectNote}` : ''}`
+                if (!await updateReport(inc.id, 'reject', rejectionReason)) return
                 toast(`${inc.code} rejected`)
                 setReject(false)
                 setRejectNote('')
@@ -545,7 +583,7 @@ export function Verification() {
           </>
         }
       >
-        <p className="text-[14px] text-ink-2">{verified?.title} is now marked verified in this workspace. Set its priority and assign a responder next.</p>
+        <p className="text-[14px] text-ink-2">{verified?.title} is now verified. Set its priority and assign a responder next.</p>
       </Modal>
     </>
   )

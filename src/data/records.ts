@@ -37,6 +37,12 @@ export interface Incident {
   createdAt: Date
   updatedAt: Date
   assignee?: string
+  assigneeName?: string
+  assigneePhone?: string
+  assignedAt?: Date | null
+  acceptanceStatus?: 'pending' | 'accepted' | 'declined'
+  acceptedAt?: Date | null
+  dispatchNotes?: string
   ai?: AISuggestion
   duplicates?: string[]
   timeline: TimelineEntry[]
