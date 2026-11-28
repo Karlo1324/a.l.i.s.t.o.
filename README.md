@@ -1,24 +1,64 @@
 # A.L.I.S.T.O.
 
-**Automated Local Incident & Spatial Tracking Operations** is a community incident-reporting project for residents and barangay staff. This repository contains a React web workspace and an Expo React Native app for Android.
+Automated Local Incident & Spatial Tracking Operations connects residents with barangay staff. Residents can submit geotagged reports and track them by reference number. Staff can verify reports, assign responders, monitor incidents on a map, and publish broadcasts to signed-in residents.
 
-| App | What you can do | Where the data lives |
-| --- | --- | --- |
-| Resident web app | Sign in, report an incident with a location and optional photos, and track its status. | Signed-in reports are stored in Supabase; guest/demo reports stay in browser memory. |
-| Staff web dashboard | Review or reject reports, dispatch responders, and track task acceptance and progress. | Staff reads and updates barangay-scoped Supabase reports when configured. |
-| Resident Android app | Save and reopen a draft with a category, description, photo, and GPS coordinates or a typed landmark. | Drafts persist in SQLite on the device. |
+## Run the web app locally
 
-Android report delivery to staff and the resident AI analytics assistant remain planned integrations. Web resident accounts and report submission use Supabase when configured.
+1. Install Node.js 22 with npm. Open a terminal in the repository root, beside this README.
+2. Install dependencies. The setup script installs both the web app and the native Android app.
 
-## Quick start
+   ```sh
+   ./setup
+   ```
 
-Install Node.js 22 with npm. From the repository root, run the setup script to install dependencies for both apps. The first install needs access to the npm registry.
+   For a web-only checkout, use `npm ci` in the repository root.
+3. Create or edit `.env.local` in the repository root. Use the project URL and **publishable key** (or legacy anon key) from your team's Supabase project. Both values are included in the client bundle, so use only a public client key.
+
+   ```dotenv
+   VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+   VITE_SUPABASE_ANON_KEY=YOUR_PUBLIC_CLIENT_KEY
+   ```
+
+4. Start the development server. Restart it after changing environment variables.
+
+   ```sh
+   npm run dev
+   ```
+
+5. Open the URL printed by Vite, normally [localhost:8443](http://localhost:8443/). Choose **Resident App** or **Official Dashboard**. The [standalone resident app](http://localhost:8443/resident/) opens directly without the desktop phone preview. For GPS, allow browser location access and use localhost or HTTPS.
+
+## Connect a Supabase database
+
+For an existing deployment, ask the project owner which migrations have already been applied. **For a new Supabase project, obtain the original A.L.I.S.T.O. database schema and reference data first.** The migrations in this checkout extend existing tables such as `profiles`, `barangays`, `damage_categories`, and `damage_reports`. A blank project cannot be initialized from these files alone.
+
+- On the intended project, open **SQL Editor** and run pending schema migrations individually in filename order. Review errors before continuing. The report migration configures the private `incident-evidence` bucket and upload policies. The category lookup migration improves submission errors for missing category or evidence records. [Migration directory](supabase/migrations)
+- Two files are deployment-specific data changes. Review them separately with your database administrator. One assigns **all active admin and official profiles** to Binaton. The other grants admin access to a **specific email address** and requires its confirmed, active profile. On another deployment, apply only the assignments intended for that project. [Binaton assignment](supabase/migrations/202611250007_assign_staff_to_binaton.sql) · [Named administrator assignment](supabase/migrations/202611250010_assign_karlofamoso4_admin.sql)
+- Register and confirm a resident account to test submission. Assign the resident a reporting barangay. For staff testing, use a confirmed account with an active staff profile. An existing administrator can assign roles in **Users & Roles** and approve responder access requests. Use matching barangay assignments to test report delivery and dispatch.
+
+## Try the monitoring map with sample incidents
+
+Sign in to the staff dashboard, open the monitoring map, and select **Map filters → Preview sample incidents**. Use **Test place** to switch between **Barangay Binaton** and **Digos City (city center)**. Select **Last 30 days** and **Include resolved incidents** to see all six examples. Turn off the preview to return to workspace reports. Sample incidents are generated locally.
+
+## Run the native Android app
+
+The resident app on the web includes an Android-style desktop preview. To install the native app on an emulator or phone, follow the [Android setup instructions](apps/resident-mobile/README.md). Signed-in submissions use Supabase, while guest drafts are saved on the device.
+
+## Machine-learning implementation guide
+
+The [ML guide](ML_GUIDE.md) covers duplicate detection, location validation, incident clustering, official broadcast drafting, and photo assistance. These features are designed as reviewable suggestions for officials rather than automatic decisions.
+
+## Verify the installation
+
+Run these commands from the repository root after setup.
 
 ```sh
-./setup
-npm run dev
+npm test
+npx tsc --noEmit
+npm run build
+npm --prefix apps/resident-mobile run typecheck
 ```
 
+<<<<<<< HEAD
 Open [localhost on port 8443](http://localhost:8443/). Without Supabase configuration, the resident guest flow and staff dashboard use a local demo workspace. With Supabase configured, sign in as a resident to submit reports and use the staff dashboard to review and dispatch them.
 
 ## Run the Android app (Note: This is still a beta test po :( )
@@ -47,3 +87,6 @@ The web screens live in [src/resident](src/resident) and [src/admin](src/admin).
 ## Supabase staff workflow
 
 The staff report review, barangay-scoped responder directory, dispatch, explicit task acceptance, resident decision notifications, and responder role requests require the SQL migrations in `supabase/migrations` to be applied to the configured Supabase project in filename order. Migration `202611250012_admin_dispatch_acceptance.sql` adds the persisted review and dispatch actions; `202611250013_resident_report_decision_notifications.sql` adds durable in-app notifications for accepted and rejected reports; `202611250014_dispatch_priority_compatibility.sql` keeps dispatch priority independent of legacy report-priority constraints; `202611250015_responder_access_requests.sql` adds admin-reviewed responder registration; and `202611280001_resident_report_category_lookup.sql` makes mobile report category resolution tolerant of category-code naming differences and replaces opaque missing-row errors with actionable messages. Responders must have an active `OFFICIAL` profile assigned to the report's barangay. Email, SMS, and push delivery are not connected.
+=======
+The web build writes to `dist/`. Run `npm run preview` to inspect the built app. To check the connected workflow, submit a test report in your test Supabase project, copy its tracking number, and find it in the staff verification queue for the same barangay.
+>>>>>>> 26144cb (Fix UI bugs/ Added ML guide / IncidentDensity Three.js Testing)

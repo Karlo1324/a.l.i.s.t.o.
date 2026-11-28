@@ -290,7 +290,7 @@ export function Field({ label, hint, children, error }: { label?: string; hint?:
 
 export function TextInput({ icon: Icon, className, right, ...rest }: ComponentPropsWithRef<'input'> & { icon?: LucideIcon; right?: ReactNode }) {
   return (
-    <div className={cx('flex h-12 items-center gap-2.5 rounded-[14px] bg-surface-2 px-3.5 ring-1 ring-transparent transition focus-within:bg-surface focus-within:ring-2 focus-within:ring-accent/60', className)}>
+    <div className={cx('flex h-12 items-center gap-2.5 rounded-[14px] border border-line-2 bg-surface-2 px-3.5 transition focus-within:border-accent focus-within:bg-surface focus-within:ring-2 focus-within:ring-accent/20', className)}>
       {Icon && <Icon size={18} className="shrink-0 text-ink-3" />}
       <input {...rest} className="h-full min-w-0 flex-1 bg-transparent text-[16px] text-ink outline-none placeholder:text-ink-3 focus-visible:outline-none" />
       {right}

@@ -1,6 +1,6 @@
 import { BroadcastFeed } from './BroadcastFeed'
 import { useState } from 'react'
-import { Bell, Inbox, Plus } from 'lucide-react'
+import { Bell, Inbox, Phone, Plus } from 'lucide-react'
 import { Button, EmptyState, IconButton, Sheet, StatusPill } from '../components/ui'
 import { Switch } from './ResidentControls'
 import { MapView } from '../components/Map'
@@ -30,7 +30,7 @@ export function Home() {
 }
 
 export function HotlinesSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  return <Sheet open={open} onClose={onClose} title="Emergency contacts"><p className="py-4 text-ink-2">No verified emergency contacts have been configured for this community.</p></Sheet>
+  return <Sheet open={open} onClose={onClose} title="Emergency contacts"><div className="space-y-3 py-3"><div className="flex items-center gap-3 rounded-xl bg-surface-2 p-3"><div className="min-w-0 flex-1"><div className="font-semibold">Digos Police</div><div className="text-sm text-ink-2">0939 924 0779</div></div><a href="tel:09399240779" aria-label="Call Digos Police" className="grid size-10 place-items-center rounded-full bg-danger text-white"><Phone size={18} /></a></div><p className="text-xs text-ink-3">For immediate danger, call emergency services first.</p></div></Sheet>
 }
 
 export function GoBagSheet({ open, onClose }: { open: boolean; onClose: () => void }) {

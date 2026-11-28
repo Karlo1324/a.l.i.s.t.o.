@@ -183,15 +183,13 @@ export function ReportFlow({ initialCategory, draft }: { initialCategory?: Categ
             Cancel
           </button>
         </div>
-        <div className="mt-2 flex items-center gap-3 rounded-[18px] bg-danger-soft p-3.5">
+        <button type="button" onClick={() => nav.openSheet('hotlines')} className="mt-2 flex w-full items-center gap-3 rounded-[18px] bg-danger-soft p-3.5 text-left transition hover:brightness-95 active:scale-[.99]">
           <Phone size={18} className="shrink-0 text-danger" />
           <span className="flex-1 text-[13px] leading-snug text-ink">
             <b>Life-threatening emergency?</b> Contact your local emergency service first.
           </span>
-          <button onClick={() => nav.openSheet('hotlines')} className="text-[13px] font-semibold text-danger">
-            Call
-          </button>
-        </div>
+          <span className="text-[13px] font-semibold text-danger">Call</span>
+        </button>
         <div className="mt-2 flex gap-1.5">
           {STEPS.map((s, i) => (
             <span key={s} className="h-1 flex-1 overflow-hidden rounded-full bg-surface-3">
