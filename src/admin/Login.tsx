@@ -27,7 +27,7 @@ export function StaffLogin({ onAuthenticated, onExit }: { onAuthenticated: (sess
       setBusy(false)
     }
   }
-  return <div className="flex min-h-full flex-col">
+  return <div className="auth-page flex min-h-full flex-col">
     <header className="flex items-center justify-between p-6">
       <button onClick={onExit} className="flex items-center gap-2 text-ink-2"><ArrowLeft size={18} /> Home</button>
       <ThemeToggle />
@@ -36,7 +36,7 @@ export function StaffLogin({ onAuthenticated, onExit }: { onAuthenticated: (sess
       <LogoMark size={56} />
       <h1 className="mt-6 text-3xl font-bold">Staff sign in</h1>
       <p className="mt-3 text-ink-2">Sign in with your assigned staff account.</p>
-      <form className="mt-6 space-y-4" onSubmit={submit}>
+      <form className="auth-surface relative mt-6 space-y-4 overflow-hidden rounded-2xl border border-line p-5 shadow-card" onSubmit={submit}>
         <Segmented full value={method} onChange={setMethod} options={[{ value: 'email', label: 'Work email' }, { value: 'phone', label: 'Phone number' }]} />
         {method === 'email' ? (
           <Field label="Work email"><TextInput icon={Mail} placeholder="Email" type="email" required autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} /></Field>

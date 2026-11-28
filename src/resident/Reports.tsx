@@ -122,9 +122,9 @@ export function ReportDetail({ id }: { id: string }) {
 
       <div className="relative -mt-6 rounded-t-[28px] bg-bg px-4 pt-5">
         <div className="px-1">
-          <div className="flex items-center justify-between">
+          <div className="flex min-w-0 flex-col items-start gap-1">
             <CategoryTag category={inc.category} />
-            <span className="font-mono text-[12px] text-ink-3">{inc.code}</span>
+            <span className="max-w-full break-all font-mono text-[12px] leading-snug text-ink-3">{inc.code}</span>
           </div>
           <h1 className="mt-2 text-[26px] leading-tight font-bold tracking-[-0.02em]">{inc.title}</h1>
           <div className="mt-2 flex items-center gap-2 text-[13px] text-ink-3">

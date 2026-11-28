@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ArrowRight, ChevronLeft, ChevronRight, Flame, Layers, Phone, Tent, TrendingUp, Truck, WavesHorizontal, X } from 'lucide-react'
 import { MapView } from '../components/Map'
+import { IncidentDensity3D } from '../components/IncidentDensity3D'
 import { Avatar, Button, CategoryIcon, PriorityPill, StatusPill } from '../components/ui'
 import { CATEGORIES, CATEGORY_KEYS, type Category } from '../data/meta'
 import { RESPONDERS } from '../data/records'
@@ -8,14 +9,14 @@ import { cx, timeAgo } from '../lib/format'
 import { useStore } from '../store'
 import { useAdmin } from './common'
 
-import { sampleIncidents, samplePlaces, type SamplePlace } from './sampleIncidents'
+import { createMockIncidents, MOCK_PLACES, type MockPlace } from '../data/mock'
 
 export function Monitoring() {
   const ctx = useAdmin()
   const { incidents: liveIncidents, toast } = useStore()
   const [sample, setSample] = useState(false)
-  const [place, setPlace] = useState<SamplePlace>('Barangay Binaton')
-  const examples = useMemo(() => sampleIncidents(place), [place])
+  const [place, setPlace] = useState<MockPlace>('Barangay Binaton')
+  const examples = useMemo(() => createMockIncidents(place), [place])
   const incidents = sample ? examples : liveIncidents
   const [panel, setPanel] = useState(true)
   const [win, setWin] = useState<'24h' | '7d' | '30d'>('7d')
@@ -70,11 +71,15 @@ export function Monitoring() {
         hazard={L.hazard}
         landmarks={L.facilities}
         responders={L.responders ? RESPONDERS.filter((r) => r.status !== 'off-duty') : undefined}
-        focus={focus ?? (sample ? samplePlaces[place] : null)}
+        focus={focus ?? (sample ? MOCK_PLACES[place] : null)}
         initialZoom={1}
         controlsClassName="bottom-5 right-5"
       >
         {/* Top stats */}
+        {sample && <div className="absolute right-4 bottom-5 z-[2] h-40 w-56 overflow-hidden rounded-xl border border-line bg-surface/90 shadow-float backdrop-blur-sm">
+          <div className="border-b border-line px-3 py-2 text-xs font-semibold">Incident density · 3D</div>
+          <div className="h-[calc(100%-33px)]"><IncidentDensity3D incidents={list} /></div>
+        </div>}
         <div className="pointer-events-none absolute top-4 right-4 left-4 flex justify-end">
           <div className="glass-strong pointer-events-auto flex items-center gap-4 rounded-full py-2 pr-4 pl-3 text-[13px] shadow-float ring-1 ring-line">
             <span className="flex items-center gap-2 font-semibold">
@@ -114,21 +119,21 @@ export function Monitoring() {
                 }} />
                 Preview sample incidents
               </label>
-              {sample && <label className="flex items-center justify-between gap-2 text-sm font-medium">
-                Test place
+              {sample && <label className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-3 text-sm font-medium">
+                <span>Test place</span>
                 <select value={place} onChange={e => {
-                  setPlace(e.target.value as SamplePlace)
+                  setPlace(e.target.value as MockPlace)
                   setFocus(null)
                   setSel(null)
                   setSelR(null)
                 }} className="min-w-0 rounded-md border border-line-2 bg-surface p-1.5 text-sm">
-                  {Object.keys(samplePlaces).map(name => <option key={name}>{name}</option>)}
+                  {Object.keys(MOCK_PLACES).map(name => <option key={name}>{name}</option>)}
                 </select>
               </label>}
               <div>
-                <label className="flex items-center justify-between gap-3 text-sm font-medium">
-                  Show incidents from
-                  <select value={win} onChange={e => setWin(e.target.value as typeof win)} className="rounded-md border border-line-2 bg-surface py-1.5 pl-2 text-sm text-ink">
+                <label className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-3 text-sm font-medium">
+                  <span>Time range</span>
+                  <select value={win} onChange={e => setWin(e.target.value as typeof win)} className="min-w-0 rounded-md border border-line-2 bg-surface py-1.5 pl-2 text-sm text-ink">
                     <option value="24h">Last 24 hours</option>
                     <option value="7d">Last 7 days</option>
                     <option value="30d">Last 30 days</option>

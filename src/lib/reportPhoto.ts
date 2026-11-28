@@ -5,8 +5,6 @@ export async function prepareReportPhoto(file: File): Promise<Blob> {
     throw new Error('Choose a JPEG, PNG, or WebP photo.')
   }
   if (!file.size) throw new Error('This photo is empty.')
-  if (file.size < MAX_REPORT_PHOTO_BYTES) return file
-
   const image = new Image()
   const url = URL.createObjectURL(file)
   const canvas = document.createElement('canvas')
@@ -14,7 +12,7 @@ export async function prepareReportPhoto(file: File): Promise<Blob> {
     image.src = url
     await image.decode()
     const longest = Math.max(image.naturalWidth, image.naturalHeight)
-    for (let edge = Math.min(3072, longest); edge >= 1; edge = Math.floor(edge / 2)) {
+    for (let edge = Math.min(1600, longest); edge >= 1; edge = Math.floor(edge / 1.5)) {
       canvas.width = Math.max(1, Math.round(image.naturalWidth * edge / longest))
       canvas.height = Math.max(1, Math.round(image.naturalHeight * edge / longest))
       const context = canvas.getContext('2d')
@@ -22,7 +20,7 @@ export async function prepareReportPhoto(file: File): Promise<Blob> {
       context.fillStyle = '#fff'
       context.fillRect(0, 0, canvas.width, canvas.height)
       context.drawImage(image, 0, 0, canvas.width, canvas.height)
-      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.72))
       if (blob && blob.size > 0 && blob.size < MAX_REPORT_PHOTO_BYTES) return blob
     }
     throw new Error('Could not compress this photo.')

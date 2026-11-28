@@ -221,7 +221,7 @@ function Shell({ onExit, onResident, onSignOut }: { onExit: () => void; onReside
   const isMap = ctx.page === 'monitor'
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="workspace-shell flex h-full overflow-hidden">
       <aside className="glass hidden w-[248px] shrink-0 border-r border-line md:block max-xl:w-[72px]">{sidebar(true)}</aside>
       {mobileNav && (
         <div className="fixed inset-0 z-[80] md:hidden">

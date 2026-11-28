@@ -1,5 +1,5 @@
 import {useState,useRef,useContext,useEffect} from 'react'
-import {Alert,BackHandler,Image,Pressable,ScrollView,Text,View,Switch} from 'react-native'
+import {Alert,BackHandler,Image,Linking,Pressable,ScrollView,Text,View,Switch} from 'react-native'
 import {useSQLiteContext} from 'expo-sqlite'
 import * as Picker from 'expo-image-picker'
 import * as Location from 'expo-location'
@@ -73,9 +73,9 @@ export function ReportForm({account,current,onSaved,initial,setBusy,onCancel,onT
  <View style={{height:44,flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}>
  <Pressable accessibilityRole="button" accessibilityLabel="Back" disabled={working} onPress={back}><Text style={{color:c.accent,fontSize:20}}>{step?'‹ Back':'×'}</Text></Pressable>
  <Text style={{color:c.ink,fontWeight:'600',fontSize:17}}>New report</Text><Pressable disabled={working} onPress={close}><Text style={{color:c.muted,fontSize:17}}>Cancel</Text></Pressable></View>
- <View style={{backgroundColor:c.bg==='#060d1f'?'#302032':'#fdecea',padding:13,borderRadius:18,flexDirection:'row',alignItems:'center',gap:10}}>
+ <Pressable accessibilityRole="button" onPress={()=>Alert.alert('Digos Police','0939 924 0779',[{text:'Cancel',style:'cancel'},{text:'Call',onPress:()=>Linking.openURL('tel:09399240779')}])} style={{backgroundColor:c.bg==='#060d1f'?'#302032':'#fdecea',padding:13,borderRadius:18,flexDirection:'row',alignItems:'center',gap:10}}>
  <Text style={{flex:1,color:c.ink,fontSize:13}}><Text style={{fontWeight:'bold'}}>Life-threatening emergency?</Text> Contact your local emergency service first.</Text>
- <Pressable accessibilityRole="button" onPress={()=>Alert.alert('Emergency contacts','No verified emergency contacts have been configured for this community.')}><Text style={{color:'#d53930',fontWeight:'600'}}>Call</Text></Pressable></View>
+ <Text style={{color:'#d53930',fontWeight:'600'}}>Call</Text></Pressable>
  <View style={{flexDirection:'row',gap:6}}>{steps.map((name,i)=><View key={name} style={{height:4,flex:1,borderRadius:2,backgroundColor:i<=step?c.accent:c.line}}/>)}</View>
  <Text style={{fontSize:13,color:c.muted}}>Step {step+1} of 5 · {steps[step]}{account?' · '+account.name:''}</Text></View>
  <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={{padding:20,gap:12}}>
